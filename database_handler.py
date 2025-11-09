@@ -105,11 +105,12 @@ class MongoDBHandler:
         except Exception as e:
             return f"Error reading CSV: {e}"
 
-        # there are duplicate entries in the Excel/csv for the same sample_id. TODO figure this out and make git issue
+        # there are duplicate entries in the Excel/csv for the same sample_id. Need to figure this out and make git issue
         duplicates = csv_df["Sample.Id"][csv_df["Sample.Id"].duplicated()]
         if not duplicates.empty:
             print(f"Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
-        csv_df_grouped = csv_df.groupby("Sample.Id").first().reset_index()
+        # csv_df_grouped = csv_df.groupby("Sample.Id").first().reset_index() # group rejects all lines except the first
+        csv_df_grouped = csv_df.groupby("Sample.Id").agg(lambda x: '|'.join(map(str, x.dropna()))).reset_index() # merge all entries
         # Convert CSV to a dictionary for fast lookup: {Id: row_dict}
         csv_lookup = csv_df_grouped.set_index("Sample.Id").to_dict(orient="index")
 
