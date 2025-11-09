@@ -1,6 +1,7 @@
 import os
 import gradio as gr
 from analyzeCurvature import analyze_svg_curvature
+from database_handler import MongoDBHandler
 
 """
 def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_window, num_samples):
@@ -35,11 +36,23 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
 def helloworld():
     return "helloworld"
 
+
 with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
+    db_handler = MongoDBHandler("svg_data")
+
     gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nLade eine SVG-Datei hoch und analysiere die Krümmung des Pfads.")
 
+    # svg upload
     with gr.Row():
-        svg_input = gr.File(label="SVG-Datei hochladen", file_types=[".svg"])
+        svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"], file_count="multiple")
+        svg_upload_button = gr.Button("Upload .svg files")
+
+    # csv upload
+    with gr.Row():
+        csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"])
+        csv_upload_button = gr.Button("Upload .csv file")
+
+    with gr.Row():
         output_dir_input = gr.Textbox(label="Ausgabeverzeichnis", value="./outputs")
 
     with gr.Row():
@@ -53,6 +66,20 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
     output_text = gr.Textbox(label="Status", interactive=False)
     curvature_plot = gr.Image(label="Krümmungsdiagramm")
     color_map = gr.Image(label="Farbkarte der Krümmung")
+
+    # svg upload
+    svg_upload_button.click(
+        fn=db_handler.insert_svg_files,
+        inputs=[svg_input],
+        outputs=[output_text]
+    )
+
+    # csv upload
+    csv_upload_button.click(
+        fn=db_handler.add_csv_data,
+        inputs=[csv_input],
+        outputs=[output_text]
+    )
 
     run_button.click(
         fn=helloworld,
