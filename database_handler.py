@@ -1,16 +1,19 @@
 from pymongo import MongoClient
 from datetime import datetime
 import os
+import pandas as pd
+import chardet
 
 
 class MongoDBHandler:
     """MongoDB handler class to manage database connections and collections."""
 
-    def __init__(self, db_name, uri="mongodb://localhost:27017/"): # mongodb://localhost:27017/ is standard installation path
-        """initialise the MongoDB handler object."""
+    def __init__(self, db_name, uri="mongodb://localhost:27017/"):
+        """initialise the MongoDB handler object.
+        mongodb://localhost:27017/ is standard path"""
         self.client = MongoClient(uri)
         self.db = self.client[db_name]
-        self.collection = None  # will set dynamically
+        self.collection = None  # will be set when needed
 
 
     def use_collection(self, collection_name):
@@ -33,33 +36,39 @@ class MongoDBHandler:
 
     def insert_svg_files(self, files):
         """
-        Insert multiple SVG files into the collection 'svg_raw'.
-
-        Parameters:
-        - files (list of file objects)
-
-        Returns:
-        - status_messages (list of str): one message per file
+        Insert multiple SVG files into the collection svg_raw.
         """
+        messages = [] # return string list
+
+        # if no files were uploaded
+        if not files:
+            messages.append("no files to upload")
+            return "\n".join(messages)
+
+        # set collection
         if self.collection is None:
             self.use_collection("svg_raw")
 
+        # duplicate entries will not be inserted but counted
         duplicate_counter = 0
 
-        messages = []
         for svg_file in files:
             try:
+                # open each file
                 with open(svg_file.name, "r", encoding="utf-8") as f:
                     content = f.read()
 
-                    # Extract just the file name (without path)
+                    # Extract just the file name (without path) and the sample_id (svg have unnecessary recons in name)
                     filename_only = os.path.basename(svg_file.name)
+                    sample_id = int(filename_only.split("_")[1].split(".")[0])
                     # Check if the file is already in the database
                     if self.collection.find_one({"filename": filename_only}):
                         duplicate_counter += 1
                         continue
 
+                # build doc and insert
                 doc = {
+                    "sample_id": sample_id,
                     "filename": filename_only,
                     "content": content,
                     "uploaded_at": datetime.utcnow()
@@ -70,10 +79,66 @@ class MongoDBHandler:
             except Exception as e:
                 messages.append(f"Error '{svg_file.name}': {e}")
 
-        # include total count
+        # return messages
         messages.append(str(duplicate_counter) + " duplicate files were not added to collection")
         messages.append(f"Total files in collection: {self.count()}")
         return "\n".join(messages)
+
+
+    def add_csv_data(self, csv_file):
+        """
+        Add CSV data to the SVG documents in the database.
+        """
+        # set collection
+        if self.collection is None:
+            self.use_collection("svg_raw")
+
+        # Read file as bytes. This gets encoding of the csv
+        rawdata = open(csv_file.name, "rb").read()
+        result = chardet.detect(rawdata)
+        encoding = result['encoding']
+
+        # Load CSV into a DataFrame
+        try:
+            csv_df = pd.read_csv(csv_file.name, sep=';', encoding=encoding)
+            # print(csv_df.columns) # debug
+        except Exception as e:
+            return f"Error reading CSV: {e}"
+
+        # there are duplicate entries in the Excel/csv for the same sample_id. TODO figure this out and make git issue
+        duplicates = csv_df["Sample.Id"][csv_df["Sample.Id"].duplicated()]
+        if not duplicates.empty:
+            print(f"Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
+        csv_df_grouped = csv_df.groupby("Sample.Id").first().reset_index()
+        # Convert CSV to a dictionary for fast lookup: {Id: row_dict}
+        csv_lookup = csv_df_grouped.set_index("Sample.Id").to_dict(orient="index")
+
+        # Iterate over documents in the collection
+        updated_count = 0
+        skipped_count = 0 # svgs that did not get new data from the csv
+        for doc in self.find():
+            sample_id = doc.get("sample_id")
+            if not sample_id:
+                skipped_count += 1
+                continue
+
+            if sample_id in csv_lookup:
+                info = csv_lookup[sample_id]
+                # Update the document in MongoDB with CSV fields
+                self.collection.update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {
+                        "Warenart": info.get("Sample.Warenart"),
+                        "Form": info.get("Sample.Form"),
+                        "Typ": info.get("Sample.Typ"),
+                        "Randerhaltung": info.get("Sample.Randerhaltung")
+                    }}
+                )
+                updated_count += 1
+            else:
+                skipped_count += 1
+
+        return f"CSV data added: {updated_count} documents updated, {skipped_count} skipped."
 
 
     def find(self, filter_query=None):

@@ -36,21 +36,24 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
 def helloworld():
     return "helloworld"
 
-def upload_svgs(svg_files):
-    """Upload multiple SVGs using the database handler."""
-    if not svg_files:
-        return "No files uploaded."
-    return db_handler.insert_svg_files(svg_files)
 
 with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
     db_handler = MongoDBHandler("svg_data")
 
     gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nLade eine SVG-Datei hoch und analysiere die Krümmung des Pfads.")
 
+    # svg upload
     with gr.Row():
         svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"], file_count="multiple")
+        svg_upload_button = gr.Button("Upload .svg files")
+
+    # csv upload
+    with gr.Row():
+        csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"])
+        csv_upload_button = gr.Button("Upload .csv file")
+
+    with gr.Row():
         output_dir_input = gr.Textbox(label="Ausgabeverzeichnis", value="./outputs")
-        upload_button = gr.Button("Upload .svg files")
 
     with gr.Row():
         smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol", label="Glättungsmethode")
@@ -64,9 +67,17 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
     curvature_plot = gr.Image(label="Krümmungsdiagramm")
     color_map = gr.Image(label="Farbkarte der Krümmung")
 
-    upload_button.click(
-        fn=upload_svgs,
+    # svg upload
+    svg_upload_button.click(
+        fn=db_handler.insert_svg_files,
         inputs=[svg_input],
+        outputs=[output_text]
+    )
+
+    # csv upload
+    csv_upload_button.click(
+        fn=db_handler.add_csv_data,
+        inputs=[csv_input],
         outputs=[output_text]
     )
 

@@ -10,8 +10,6 @@ def main():
     db.use_collection("svg_raw")
     print("svg_raw count:", db.count())
 
-    # TODO startup database check.
-
     # launch web ui (http://127.0.0.1:7860/)
     demo.launch()
 
