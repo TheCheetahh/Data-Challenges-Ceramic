@@ -1,6 +1,7 @@
 import os
 import gradio as gr
 from analyzeCurvature import analyze_svg_curvature
+from database_handler import MongoDBHandler
 
 """
 def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_window, num_samples):
@@ -35,12 +36,21 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
 def helloworld():
     return "helloworld"
 
+def upload_svg(svg_file):
+    """Upload SVG using the database handler."""
+    if svg_file is None:
+        return "No file uploaded."
+    return db_handler.insert_svg_file(svg_file)
+
 with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
+    db_handler = MongoDBHandler("svg_data")
+
     gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nLade eine SVG-Datei hoch und analysiere die Krümmung des Pfads.")
 
     with gr.Row():
         svg_input = gr.File(label="SVG-Datei hochladen", file_types=[".svg"])
         output_dir_input = gr.Textbox(label="Ausgabeverzeichnis", value="./outputs")
+        upload_button = gr.Button("Upload .svg files")
 
     with gr.Row():
         smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol", label="Glättungsmethode")
@@ -53,6 +63,12 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
     output_text = gr.Textbox(label="Status", interactive=False)
     curvature_plot = gr.Image(label="Krümmungsdiagramm")
     color_map = gr.Image(label="Farbkarte der Krümmung")
+
+    upload_button.click(
+        fn=upload_svg,
+        inputs=[svg_input],
+        outputs=[output_text]
+    )
 
     run_button.click(
         fn=helloworld,
