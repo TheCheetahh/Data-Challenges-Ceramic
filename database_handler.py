@@ -70,7 +70,7 @@ class MongoDBHandler:
                 doc = {
                     "sample_id": sample_id,
                     "filename": filename_only,
-                    "content": content,
+                    "raw_content": content,
                     "uploaded_at": datetime.utcnow()
                 }
                 self.insert(doc)
@@ -108,7 +108,7 @@ class MongoDBHandler:
         # there are duplicate entries in the Excel/csv for the same sample_id. Need to figure this out and make git issue
         duplicates = csv_df["Sample.Id"][csv_df["Sample.Id"].duplicated()]
         if not duplicates.empty:
-            print(f"Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
+            print(f"⚠️ Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
         # csv_df_grouped = csv_df.groupby("Sample.Id").first().reset_index() # group rejects all lines except the first
         csv_df_grouped = csv_df.groupby("Sample.Id").agg(lambda x: '|'.join(map(str, x.dropna()))).reset_index() # merge all entries
         # Convert CSV to a dictionary for fast lookup: {Id: row_dict}

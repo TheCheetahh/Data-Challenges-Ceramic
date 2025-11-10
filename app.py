@@ -1,9 +1,9 @@
 import os
 import gradio as gr
-from analyzeCurvature import analyze_svg_curvature
+from analyzeCurvature import analyze_svg_curvature, analyse_svg
 from database_handler import MongoDBHandler
 
-"""
+
 def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_window, num_samples):
     # 1️⃣ Validierung
     if svg_file is None:
@@ -31,7 +31,7 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
 
     except Exception as e:
         return f"🚨 Fehler: {str(e)}", None, None
-#"""
+
 
 def helloworld():
     return "helloworld"
@@ -61,7 +61,7 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
         smooth_window_slider = gr.Slider(3, 51, value=15, step=2, label="Glättungsfenster")
         samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
 
-    run_button = gr.Button("🚀 Analyse starten")
+    clean_svg_button = gr.Button("🚀 Clean SVG")
 
     output_text = gr.Textbox(label="Status", interactive=False)
     curvature_plot = gr.Image(label="Krümmungsdiagramm")
@@ -81,8 +81,8 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
         outputs=[output_text]
     )
 
-    run_button.click(
-        fn=helloworld,
+    clean_svg_button.click(
+        fn=analyse_svg,
         inputs=[],
         outputs=[output_text]
     )

@@ -8,6 +8,8 @@ from svgpathtools import svg2paths
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import splprep, splev
 import argparse
+from cleanSVG import clean_all_svgs
+from database_handler import MongoDBHandler
 
 
 def smooth_path_savgol(points, window_length, smooth_factor):
@@ -171,6 +173,13 @@ def analyze_svg_curvature(svg_file, output_dir, smooth_method, smooth_factor, sm
     print("✅ Analyse abgeschlossen!")
     print(f"📊 Krümmungsdiagramm gespeichert unter: {curvature_plot_path}")
     print(f"🎨 Farbkarte gespeichert unter:       {curvature_color_path}")
+
+
+def analyse_svg():
+    db_handler = MongoDBHandler("svg_data")
+    message = clean_all_svgs(db_handler)
+
+    return message
 
 
 def main():
