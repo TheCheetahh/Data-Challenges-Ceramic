@@ -33,8 +33,27 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
         return f"🚨 Fehler: {str(e)}", None, None
 
 
-def helloworld():
-    return "helloworld"
+def format_svg_for_display(cleaned_svg):
+    """
+    Wrap the SVG in a bordered white box for display on the web page.
+    """
+    return f"""
+    <div style="
+        border: 2px solid black;
+        background-color: white;
+        padding: 10px;
+        display: inline-block;
+    ">
+        {cleaned_svg}
+    </div>
+    """
+
+def show_svg_ui(sample_id):
+    cleaned_svg, error = db_handler.get_cleaned_svg(sample_id)
+    if error:
+        return f"<p style='color:red;'>{error}</p>"
+
+    return format_svg_for_display(cleaned_svg)
 
 
 with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
@@ -63,9 +82,13 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
 
     clean_svg_button = gr.Button("🚀 Clean SVG")
 
-    output_text = gr.Textbox(label="Status", interactive=False)
-    curvature_plot = gr.Image(label="Krümmungsdiagramm")
-    color_map = gr.Image(label="Farbkarte der Krümmung")
+    with gr.Row():
+        output_text = gr.Textbox(label="Status", interactive=False)
+
+    filename_input = gr.Textbox(label="sample_id of the svg to be displayed eg. 10001")
+    show_button = gr.Button("Show SVG")
+
+    svg_output = gr.HTML()
 
     # svg upload
     svg_upload_button.click(
@@ -85,6 +108,12 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
         fn=analyse_svg,
         inputs=[],
         outputs=[output_text]
+    )
+
+    show_button.click(
+        fn=show_svg_ui,
+        inputs=[filename_input],
+        outputs=svg_output
     )
 
 demo.launch()

@@ -89,6 +89,9 @@ class MongoDBHandler:
         """
         Add CSV data to the SVG documents in the database.
         """
+        if csv_file is None:
+            return "⚠️ No CSV file provided."
+
         # set collection
         if self.collection is None:
             self.use_collection("svg_raw")
@@ -139,7 +142,7 @@ class MongoDBHandler:
             else:
                 skipped_count += 1
 
-        return f"CSV data added: {updated_count} documents updated, {skipped_count} skipped."
+        return f"CSV data added: {updated_count} documents updated, {skipped_count} were not found."
 
 
     def find(self, filter_query=None):
@@ -150,3 +153,21 @@ class MongoDBHandler:
 
     def close(self):
         self.client.close()
+
+    def get_cleaned_svg(self, sample_id):
+        self.use_collection("svg_raw")
+
+        try:
+            sample_id = int(sample_id)
+        except ValueError:
+            return None, "❌ sample_id must be a number."
+
+        doc = self.collection.find_one({"sample_id": sample_id})
+        if not doc:
+            return None, f"❌ No entry found for sample_id {sample_id}."
+
+        cleaned_svg = doc.get("cleaned_svg")
+        if not cleaned_svg:
+            return None, f"⚠️ No cleaned SVG stored for sample_id {sample_id}."
+
+        return cleaned_svg, None
