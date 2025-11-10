@@ -70,7 +70,7 @@ class MongoDBHandler:
                 doc = {
                     "sample_id": sample_id,
                     "filename": filename_only,
-                    "content": content,
+                    "raw_content": content,
                     "uploaded_at": datetime.utcnow()
                 }
                 self.insert(doc)
@@ -89,6 +89,9 @@ class MongoDBHandler:
         """
         Add CSV data to the SVG documents in the database.
         """
+        if csv_file is None:
+            return "⚠️ No CSV file provided."
+
         # set collection
         if self.collection is None:
             self.use_collection("svg_raw")
@@ -108,7 +111,7 @@ class MongoDBHandler:
         # there are duplicate entries in the Excel/csv for the same sample_id. Need to figure this out and make git issue
         duplicates = csv_df["Sample.Id"][csv_df["Sample.Id"].duplicated()]
         if not duplicates.empty:
-            print(f"Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
+            print(f"⚠️ Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
         # csv_df_grouped = csv_df.groupby("Sample.Id").first().reset_index() # group rejects all lines except the first
         csv_df_grouped = csv_df.groupby("Sample.Id").agg(lambda x: '|'.join(map(str, x.dropna()))).reset_index() # merge all entries
         # Convert CSV to a dictionary for fast lookup: {Id: row_dict}
@@ -139,7 +142,7 @@ class MongoDBHandler:
             else:
                 skipped_count += 1
 
-        return f"CSV data added: {updated_count} documents updated, {skipped_count} skipped."
+        return f"CSV data added: {updated_count} documents updated, {skipped_count} were not found."
 
 
     def find(self, filter_query=None):
@@ -150,3 +153,31 @@ class MongoDBHandler:
 
     def close(self):
         self.client.close()
+
+    def get_cleaned_svg(self, sample_id):
+        self.use_collection("svg_raw")
+
+        try:
+            sample_id = int(sample_id)
+        except ValueError:
+            return None, "❌ sample_id must be a number."
+
+        doc = self.collection.find_one({"sample_id": sample_id})
+        if not doc:
+            return None, f"❌ No entry found for sample_id {sample_id}."
+
+        cleaned_svg = doc.get("cleaned_svg")
+        if not cleaned_svg:
+            return None, f"⚠️ No cleaned SVG stored for sample_id {sample_id}."
+
+        return cleaned_svg, None
+
+
+    def list_svg_ids(self):
+        """
+        Return a sorted list of sample_ids for all SVGs in 'svg_raw'.
+        """
+        self.use_collection("svg_raw")
+        docs = self.collection.find({}, {"sample_id": 1})
+        sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]
+        return sorted(sample_ids)

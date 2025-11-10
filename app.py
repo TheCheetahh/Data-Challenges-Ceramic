@@ -1,9 +1,9 @@
 import os
 import gradio as gr
-from analyzeCurvature import analyze_svg_curvature
+from analyzeCurvature import analyze_svg_curvature, analyse_svg
 from database_handler import MongoDBHandler
 
-"""
+
 def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_window, num_samples):
     # 1️⃣ Validierung
     if svg_file is None:
@@ -31,10 +31,29 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
 
     except Exception as e:
         return f"🚨 Fehler: {str(e)}", None, None
-#"""
 
-def helloworld():
-    return "helloworld"
+
+def format_svg_for_display(cleaned_svg):
+    """
+    Wrap the SVG in a bordered white box for display on the web page.
+    """
+    return f"""
+    <div style="
+        border: 2px solid black;
+        background-color: white;
+        padding: 10px;
+        display: inline-block;
+    ">
+        {cleaned_svg}
+    </div>
+    """
+
+def show_svg_ui(sample_id):
+    cleaned_svg, error = db_handler.get_cleaned_svg(sample_id)
+    if error:
+        return f"<p style='color:red;'>{error}</p>"
+
+    return format_svg_for_display(cleaned_svg)
 
 
 with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
@@ -61,11 +80,19 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
         smooth_window_slider = gr.Slider(3, 51, value=15, step=2, label="Glättungsfenster")
         samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
 
-    run_button = gr.Button("🚀 Analyse starten")
+    clean_svg_button = gr.Button("🚀 Clean SVG")
 
-    output_text = gr.Textbox(label="Status", interactive=False)
-    curvature_plot = gr.Image(label="Krümmungsdiagramm")
-    color_map = gr.Image(label="Farbkarte der Krümmung")
+    with gr.Row():
+        output_text = gr.Textbox(label="Status", interactive=False)
+
+    svg_id_list = db_handler.list_svg_ids()
+    svg_dropdown = gr.Dropdown(
+        choices=[str(sid) for sid in svg_id_list],
+        label="Select SVG to display"
+    )
+    show_button = gr.Button("Show SVG")
+
+    svg_output = gr.HTML()
 
     # svg upload
     svg_upload_button.click(
@@ -81,10 +108,16 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
         outputs=[output_text]
     )
 
-    run_button.click(
-        fn=helloworld,
+    clean_svg_button.click(
+        fn=analyse_svg,
         inputs=[],
         outputs=[output_text]
+    )
+
+    show_button.click(
+        fn=show_svg_ui,
+        inputs=[svg_dropdown],
+        outputs=svg_output
     )
 
 demo.launch()
