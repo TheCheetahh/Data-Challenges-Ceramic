@@ -2,7 +2,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 import argparse
-from database_handler import MongoDBHandler
+
 
 def estimate_path_complexity(d):
     """Schätzt die Komplexität eines SVG-Pfads anhand der Anzahl an Zahlen im 'd'-Attribut."""
@@ -64,6 +64,7 @@ def get_most_complex_black_fill(raw_svg):
     returns cleaned SVG as a string.
     """
 
+    # svg parser setup stuff
     ET.register_namespace("", "http://www.w3.org/2000/svg")
     root = ET.fromstring(raw_svg)
     ns = {"svg": root.tag.split('}')[0].strip('{')}
@@ -71,6 +72,7 @@ def get_most_complex_black_fill(raw_svg):
     all_elements = root.findall(".//*", ns)
     black_elements = []
 
+    # go through all svg items in the file and search for all black shapes
     for element in all_elements:
         fill = element.attrib.get("fill", "").strip().lower()
         if fill in ("#000000", "black"):
@@ -85,10 +87,12 @@ def get_most_complex_black_fill(raw_svg):
             black_elements.append((element, complexity))
 
     if not black_elements:
-        return None  # No black object → return nothing
+        return None
 
+    # get the most complex shape as it is likely the blob we need
     most_complex = max(black_elements, key=lambda x: x[1])[0]
 
+    # create new svg from the blob
     new_svg = ET.Element(root.tag, root.attrib)
     new_svg.append(most_complex)
 
@@ -96,18 +100,23 @@ def get_most_complex_black_fill(raw_svg):
 
 
 def clean_all_svgs(db_handler):
+    """create a svg of only the black blob for all svgs in the database"""
 
+    # set database and get all docs
     collection = db_handler.db["svg_raw"]
     docs = collection.find({})
     counter = 0
 
+    # get the raw content of the svg and check if it already has a cleaned svg
     for doc in docs:
         raw_content = doc.get("raw_content")
         if not raw_content or doc.get("cleaned_svg"):
             continue
 
+        # get the black blob of the raw svg
         cleaned_svg = get_most_complex_black_fill(raw_content)
 
+        # save the clean svg to database
         if cleaned_svg:
             counter += 1
             collection.update_one(
