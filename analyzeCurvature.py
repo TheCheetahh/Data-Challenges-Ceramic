@@ -453,6 +453,61 @@ def analyse_svg():
     return message
 
 
+def find_closest_curvature(sample_id):
+    """
+    Finds the sample whose curvature line is closest to the given sample_id.
+    Returns: closest_sample_id, distance
+    """
+
+    # Convert sample_id to int
+    try:
+        sample_id = int(sample_id)
+    except:
+        return None, None, f"Invalid sample_id {sample_id}"
+
+    db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_raw")
+
+    # Get curvature of the target sample
+    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if not doc or "curvature_data" not in doc:
+        return None, None, f"No curvature data for sample_id {sample_id}"
+
+    target_curvature = np.array(doc["curvature_data"]["curvature"])
+
+    # Iterate over all other documents
+    min_distance = float("inf")
+    closest_id = None
+
+    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
+                                                {"sample_id": 1, "curvature_data": 1}):
+        other_id = other_doc["sample_id"]
+        if "curvature_data" not in other_doc:
+            continue
+        other_curve = np.array(other_doc["curvature_data"]["curvature"])
+
+        # If lengths differ, interpolate to match
+        if len(other_curve) != len(target_curvature):
+            other_curve = np.interp(
+                np.linspace(0, 1, len(target_curvature)),
+                np.linspace(0, 1, len(other_curve)),
+                other_curve
+            )
+
+        # Compute Euclidean distance
+        dist = np.linalg.norm(target_curvature - other_curve)
+
+        if dist < min_distance:
+            min_distance = dist
+            closest_id = other_id
+
+    if closest_id is None:
+        return None, None, "No other samples with curvature data found."
+
+    return closest_id, min_distance, f"Closest sample to {sample_id} is {closest_id} with distance {min_distance:.4f}"
+
+
+"""
 def main():
     parser = argparse.ArgumentParser(description="Analyse eines SVG-Pfads (Krümmung etc.)")
     parser.add_argument("--input_svg", type=str, required=True, help="Pfad zur Eingabe-SVG-Datei")
@@ -477,3 +532,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""

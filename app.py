@@ -1,7 +1,7 @@
 import gradio as gr
 
 from analyzeCurvature import analyze_svg_curvature, analyse_svg, load_and_plot_curvature, \
-    compute_and_store_curvature_for_all
+    compute_and_store_curvature_for_all, find_closest_curvature
 from database_handler import MongoDBHandler
 
 def store_svg(svg_input):
@@ -22,6 +22,7 @@ def refresh_svg_dropdown(db_handler):
 def show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
     # Get the cleaned SVG
     db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_raw")
     cleaned_svg, error = db_handler.get_cleaned_svg(sample_id)
 
     if error:
@@ -46,12 +47,29 @@ def show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_window,
     curvature_plot_img, curvature_color_img, plot_status = load_and_plot_curvature(sample_id)
 
     # Run curvature analysis
-    curvature_plot_img, curvature_color_img, status_msg = analyze_svg_curvature(
+    curvature_plot_img, curvature_color_img, status_msg = analyze_svg_curvature( # TODO why call this function here
         sample_id, smooth_method, smooth_factor, smooth_window, n_samples)
+
+    closest_id, distance, msg = find_closest_curvature(sample_id)
+    if closest_id is not None:
+        closest_plot_img, closest_color_img, _ = load_and_plot_curvature(closest_id)
+        closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
+
+        # Load the closest SVG
+        closest_cleaned_svg, err = db_handler.get_cleaned_svg(closest_id)
+        if not err:
+            closest_svg_html = format_svg_for_display(closest_cleaned_svg)
+        else:
+            closest_svg_html = f"<p style='color:red;'>Error loading closest SVG: {err}</p>"
+    else:
+        closest_plot_img = None
+        closest_color_img = None
+        closest_svg_html = "<div style='width:300px; height:300px; border:1px solid #ccc;'>SVG not found</div>"
+        closest_id_text = "No closest match found"
 
     final_status_message = f"{compute_status}\n{plot_status}"
 
-    return svg_html, curvature_plot_img, curvature_color_img, final_status_message
+    return svg_html, curvature_plot_img, curvature_color_img, final_status_message, closest_svg_html, closest_plot_img, closest_color_img, closest_id_text
 
 
 """
@@ -171,7 +189,11 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
 
                 # Right column: reserved for other content
                 with gr.Column(scale=1, min_width=400):
-                    gr.Markdown("## Right Column Content of suggested types etc")
+                    gr.Markdown("## Closest Match")
+                    closest_sample_id_output = gr.Textbox(label="Closest Sample ID", interactive=False)
+                    closest_svg_output = gr.HTML(value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
+                    closest_curvature_plot_output = gr.Image(label="Curvature Plot")
+                    closest_curvature_color_output = gr.Image(label="Curvature Color Map")
 
 
 # Button logic:
@@ -198,5 +220,7 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
     analyze_button.click(
         fn=show_and_analyze_svg,
         inputs=[svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
-        outputs=[svg_output, curvature_plot_output, curvature_color_output, status_output]
+        outputs=[svg_output, curvature_plot_output, curvature_color_output, status_output, closest_svg_output,
+            closest_curvature_plot_output, closest_curvature_color_output, closest_sample_id_output
+        ]
     )
