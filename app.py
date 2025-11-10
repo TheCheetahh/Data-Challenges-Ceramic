@@ -1,9 +1,30 @@
 import os
 import gradio as gr
+from fastapi.openapi.utils import status_code_ranges
+
 from analyzeCurvature import analyze_svg_curvature, analyse_svg
 from database_handler import MongoDBHandler
 
 
+def show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
+    # Get the cleaned SVG
+    db_handler = MongoDBHandler("svg_data")
+    cleaned_svg, error = db_handler.get_cleaned_svg(sample_id)
+    if error:
+        svg_html = f"<p style='color:red;'>{error}</p>"
+        return svg_html, None, None, error
+
+    svg_html = format_svg_for_display(cleaned_svg)
+
+    # Run curvature analysis
+    curvature_plot_img, curvature_color_img, status_msg = analyze_svg_curvature(
+        sample_id, smooth_method, smooth_factor, smooth_window, n_samples
+    )
+
+    return svg_html, curvature_plot_img, curvature_color_img, status_msg
+
+
+"""
 def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_window, num_samples):
     # 1️⃣ Validierung
     if svg_file is None:
@@ -31,6 +52,7 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
 
     except Exception as e:
         return f"🚨 Fehler: {str(e)}", None, None
+"""
 
 
 def format_svg_for_display(cleaned_svg):
@@ -40,7 +62,11 @@ def format_svg_for_display(cleaned_svg):
         border: 2px solid black;
         background-color: white;
         padding: 10px;
-        display: inline-block;
+        width: 500px;
+        height: 500px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     ">
         {cleaned_svg}
     </div>
@@ -79,29 +105,43 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
 
             # status box is output for the messages from the buttons of this tab
             with gr.Row():
-                output_text = gr.Textbox(label="Status", interactive=False)
+                status_output_text = gr.Textbox(label="Status", interactive=False)
 
         # Tab for all analysis related tasks
         with gr.Tab("Analyse files"):
             gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nAnalysiere die SVG Dateien.")
 
-            # settings for curve smoothing
+            # settings for analysis
             with gr.Row():
-                smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol", label="Glättungsmethode")
+                smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
+                                                     label="Glättungsmethode")
                 smooth_factor = gr.Slider(0, 0.1, value=0.02, step=0.005, label="Glättungsfaktor")
                 smooth_window_slider = gr.Slider(3, 51, value=15, step=2, label="Glättungsfenster")
                 samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
 
-            # dropdown to select a svg
-            svg_id_list = db_handler.list_svg_ids()
-            svg_dropdown = gr.Dropdown(
-                choices=[str(sid) for sid in svg_id_list],
-                label="Select SVG to display"
-            )
-            show_button = gr.Button("Show SVG")
+            # status box
+            with gr.Row():
+                status_output = gr.Textbox(label="Status", interactive=False)
 
-            # output/display for the svg that was selected
-            svg_output = gr.HTML()
+            # display analysis content
+            with gr.Row():
+                # Left column: inspected svg
+                with gr.Column(scale=1, min_width=600):
+                    svg_dropdown = gr.Dropdown(
+                        choices=[str(sid) for sid in db_handler.list_svg_ids()],
+                        label="Select SVG to display"
+                    )
+                    analyze_button = gr.Button("Analyze SVG")
+
+                    svg_output = gr.HTML(
+                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
+                    )
+                    curvature_plot_output = gr.Image(label="Curvature Plot")
+                    curvature_color_output = gr.Image(label="Curvature Color Map")
+
+                # Right column: reserved for other content
+                with gr.Column(scale=1, min_width=400):
+                    gr.Markdown("## Right Column Content of suggested types etc")
 
 
 # Button logic:
@@ -109,24 +149,24 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
     svg_upload_button.click(
         fn=db_handler.insert_svg_files,
         inputs=[svg_input],
-        outputs=[output_text]
+        outputs=[status_output_text]
     )
 
     # csv upload
     csv_upload_button.click(
         fn=db_handler.add_csv_data,
         inputs=[csv_input],
-        outputs=[output_text]
+        outputs=[status_output_text]
     )
 
     clean_svg_button.click(
         fn=analyse_svg,
         inputs=[],
-        outputs=[output_text]
+        outputs=[status_output_text]
     )
 
-    show_button.click(
-        fn=show_svg_ui,
-        inputs=[svg_dropdown],
-        outputs=svg_output
+    analyze_button.click(
+        fn=show_and_analyze_svg,
+        inputs=[svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        outputs=[svg_output, curvature_plot_output, curvature_color_output, status_output]
     )

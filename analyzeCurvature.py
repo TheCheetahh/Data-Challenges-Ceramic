@@ -1,7 +1,9 @@
+import io
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
+from PIL import Image
 from matplotlib.colors import Normalize
 from scipy.signal import savgol_filter
 from svgpathtools import svg2paths
@@ -45,7 +47,8 @@ def curvature_from_points(points):
     ddy = np.gradient(dy, edge_order=2)
 
     # signierte Krümmung (Vorzeichen abhängig von Richtung)
-    curvature = (dx * ddy - dy * ddx) / (dx**2 + dy**2)**1.5
+    epsilon = 1e-10 # verhindert divide by zero
+    curvature = (dx * ddy - dy * ddx) / (dx ** 2 + dy ** 2 + epsilon) ** 1.5
     curvature[np.isnan(curvature)] = 0
 
     # leichte Glättung für Stabilität
@@ -96,8 +99,6 @@ def normalize_path(points, smooth_method, smooth_factor, smooth_window):
     return points
 
 
-
-
 def sample_svg_path(svg_file, n_samples=1000):
     """Liest den SVG-Pfad und tastet ihn gleichmäßig entlang der Länge ab (umgekehrte Richtung)."""
     paths, _ = svg2paths(svg_file)
@@ -106,10 +107,7 @@ def sample_svg_path(svg_file, n_samples=1000):
     pts = np.array([path.point(t) for t in ts])
     return np.column_stack((pts.real, pts.imag))
 
-
-
-
-
+"""
 def analyze_svg_curvature(svg_file, output_dir, smooth_method, smooth_factor, smooth_window, n_samples=2000):
     base_name = os.path.splitext(os.path.basename(svg_file))[0]
     base_dir = os.path.dirname(svg_file)
@@ -173,6 +171,86 @@ def analyze_svg_curvature(svg_file, output_dir, smooth_method, smooth_factor, sm
     print("✅ Analyse abgeschlossen!")
     print(f"📊 Krümmungsdiagramm gespeichert unter: {curvature_plot_path}")
     print(f"🎨 Farbkarte gespeichert unter:       {curvature_color_path}")
+"""
+
+
+def analyze_svg_curvature(sample_id, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
+    """
+    Analyze curvature directly from the cleaned SVG stored in the database.
+    Returns paths to the generated curvature plots.
+    """
+    # convert sample_id to int
+    try:
+        sample_id = int(sample_id)
+    except ValueError:
+        return None, "❌ sample_id must be a number."
+
+    # Get cleaned SVG from DB
+    db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_raw")
+    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if not doc or "cleaned_svg" not in doc:
+        return None, None, f"No cleaned SVG found for sample_id {sample_id}"
+
+    cleaned_svg_content = doc["cleaned_svg"]
+
+    # Load paths from SVG content using BytesIO
+    svg_file_like = io.StringIO(cleaned_svg_content)
+    paths, _ = svg2paths(svg_file_like)
+    if len(paths) == 0:
+        return None, None, f"No paths found in SVG for sample_id {sample_id}"
+
+    path = paths[0]
+    ts = np.linspace(0, 1, n_samples)
+    points = np.array([path.point(t) for t in ts])
+    points = np.column_stack((points.real, points.imag))
+
+    # Normalize & smooth
+    points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
+
+    # Curvature
+    curvature = curvature_from_points(points)
+    arc_lengths = np.concatenate(([0], np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))))
+    arc_lengths /= arc_lengths[-1]
+
+    # --- Generate plots ---
+    # Curvature line plot (1D plot)
+    buf1 = io.BytesIO()
+    plt.figure(figsize=(10, 4))
+    plt.axhline(0, color="gray", linestyle="--")
+    plt.plot(arc_lengths, curvature, color="black")
+    plt.title(f"Curvature along normalized arc length ({smooth_method})")
+    plt.xlabel("Normalized arc length")
+    plt.ylabel("Curvature κ")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(buf1, format="png")
+    plt.close()
+    buf1.seek(0)
+    curvature_plot_img = Image.open(buf1)
+
+    # Curvature color map (2D color map)
+    segments = np.stack([points[:-1], points[1:]], axis=1)
+    norm = Normalize(vmin=-np.max(np.abs(curvature)), vmax=np.max(np.abs(curvature)) * 0.8)
+    buf2 = io.BytesIO()
+    fig, ax = plt.subplots(figsize=(6, 6))
+    lc = LineCollection(segments, cmap="coolwarm", norm=norm)
+    lc.set_array(curvature)
+    lc.set_linewidth(2)
+    ax.add_collection(lc)
+    ax.autoscale()
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+    ax.set_title("Curvature Color Map")
+    plt.colorbar(lc, ax=ax, label="Curvature κ")
+    plt.tight_layout()
+    plt.savefig(buf2, format="png")
+    plt.close()
+    buf2.seek(0)
+    curvature_color_img = Image.open(buf2)
+
+    print("✅ Analyse abgeschlossen!")
+    return curvature_plot_img, curvature_color_img, f"Analysis completed for sample_id {sample_id}"
 
 
 def analyse_svg():
