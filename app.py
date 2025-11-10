@@ -1,27 +1,57 @@
-import os
 import gradio as gr
-from fastapi.openapi.utils import status_code_ranges
 
-from analyzeCurvature import analyze_svg_curvature, analyse_svg
+from analyzeCurvature import analyze_svg_curvature, analyse_svg, load_and_plot_curvature, \
+    compute_and_store_curvature_for_all
 from database_handler import MongoDBHandler
+
+def store_svg(svg_input):
+    db_handler = MongoDBHandler("svg_data")
+    message = db_handler.insert_svg_files(svg_input)
+    # Return both status message and dropdown update
+    svg_id_list = db_handler.list_svg_ids()
+    dropdown_update = gr.update(choices=[str(sid) for sid in svg_id_list])
+    return message, dropdown_update
+
+def refresh_svg_dropdown(db_handler):
+    # Fetch the latest SVG IDs from the database
+    svg_id_list = db_handler.list_svg_ids()
+    # Return an updated Dropdown object
+    return gr.Dropdown.update(choices=[str(sid) for sid in svg_id_list])
 
 
 def show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
     # Get the cleaned SVG
     db_handler = MongoDBHandler("svg_data")
     cleaned_svg, error = db_handler.get_cleaned_svg(sample_id)
+
     if error:
         svg_html = f"<p style='color:red;'>{error}</p>"
         return svg_html, None, None, error
 
     svg_html = format_svg_for_display(cleaned_svg)
 
-    # Run curvature analysis
-    curvature_plot_img, curvature_color_img, status_msg = analyze_svg_curvature(
-        sample_id, smooth_method, smooth_factor, smooth_window, n_samples
+    # Compute and store curvature data
+    compute_status = compute_and_store_curvature_for_all(
+        smooth_method=smooth_method,
+        smooth_factor=smooth_factor,
+        smooth_window=smooth_window,
+        n_samples=n_samples
     )
 
-    return svg_html, curvature_plot_img, curvature_color_img, status_msg
+    # If computation failed
+    if compute_status.startswith("❌"):
+        return svg_html, None, None, compute_status
+
+    # load plot for the selected one
+    curvature_plot_img, curvature_color_img, plot_status = load_and_plot_curvature(sample_id)
+
+    # Run curvature analysis
+    curvature_plot_img, curvature_color_img, status_msg = analyze_svg_curvature(
+        sample_id, smooth_method, smooth_factor, smooth_window, n_samples)
+
+    final_status_message = f"{compute_status}\n{plot_status}"
+
+    return svg_html, curvature_plot_img, curvature_color_img, final_status_message
 
 
 """
@@ -147,9 +177,9 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
 # Button logic:
     # svg upload
     svg_upload_button.click(
-        fn=db_handler.insert_svg_files,
+        fn=store_svg,
         inputs=[svg_input],
-        outputs=[status_output_text]
+        outputs=[status_output_text, svg_dropdown]
     )
 
     # csv upload

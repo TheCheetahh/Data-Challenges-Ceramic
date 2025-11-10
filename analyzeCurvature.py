@@ -174,6 +174,187 @@ def analyze_svg_curvature(svg_file, output_dir, smooth_method, smooth_factor, sm
 """
 
 
+def compute_and_store_curvature_for_all(smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
+    """
+    Compute curvature for ALL documents that have cleaned_svg (skip if already stored).
+    """
+    db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_raw")
+
+    docs = db_handler.collection.find({}, {"sample_id": 1, "cleaned_svg": 1, "curvature_data": 1})
+
+    processed = 0
+    skipped = 0
+    errors = 0
+
+    # Settings bundle to compare
+    current_settings = {
+        "smooth_method": smooth_method,
+        "smooth_factor": smooth_factor,
+        "smooth_window": smooth_window,
+        "n_samples": n_samples
+    }
+
+    for doc in docs:
+        sample_id = doc.get("sample_id")
+        if not sample_id:
+            continue
+
+        stored_data = doc.get("curvature_data")
+        stored_settings = stored_data.get("settings", {}) if stored_data else {}
+
+        if (
+                stored_settings.get("smooth_method") == smooth_method and
+                float(stored_settings.get("smooth_factor", 0)) == float(smooth_factor) and
+                int(stored_settings.get("smooth_window", 0)) == int(smooth_window) and
+                int(stored_settings.get("n_samples", 0)) == int(n_samples)
+        ):
+            skipped += 1
+            continue
+
+        # --- Compute and overwrite stored curvature data ---
+        status = compute_and_store_curvature(
+            sample_id,
+            smooth_method=smooth_method,
+            smooth_factor=smooth_factor,
+            smooth_window=smooth_window,
+            n_samples=n_samples
+        )
+
+        if status.startswith("❌"):
+            errors += 1
+        else:
+            processed += 1
+
+    return f"✅ Recomputed: {processed}, ⏭️ Skipped (same settings): {skipped}, ❌ Errors: {errors}"
+
+
+def compute_and_store_curvature(sample_id, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
+    try:
+        sample_id = int(sample_id)
+    except ValueError:
+        return f"❌ sample_id must be an integer."
+
+    db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_raw")
+    doc = db_handler.collection.find_one({"sample_id": sample_id})
+
+    if not doc or "cleaned_svg" not in doc:
+        return f"❌ No cleaned SVG found for sample_id {sample_id}"
+
+    # Parse SVG path
+    svg_file_like = io.StringIO(doc["cleaned_svg"])
+    paths, _ = svg2paths(svg_file_like)
+    if len(paths) == 0:
+        return f"❌ No valid path found in SVG."
+
+    # Sample points
+    path = paths[0]
+    ts = np.linspace(0, 1, n_samples)
+    points = np.array([path.point(t) for t in ts])
+    points = np.column_stack((points.real, points.imag))
+
+    # Normalize & Smooth
+    points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
+
+    # Compute curvature
+    curvature = curvature_from_points(points)
+    arc_lengths = np.concatenate(([0], np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))))
+    arc_lengths /= arc_lengths[-1]
+
+    # Store in DB
+    db_handler.collection.update_one(
+        {"sample_id": sample_id},
+        {"$set": {
+            "curvature_data": {
+                "arc_lengths": arc_lengths.tolist(),
+                "curvature": curvature.tolist(),
+                "settings": {
+                    "smooth_method": smooth_method,
+                    "smooth_factor": smooth_factor,
+                    "smooth_window": smooth_window,
+                    "n_samples": n_samples
+                }
+            }
+        }}
+    )
+
+    return f"✅ Curvature computation stored for sample_id {sample_id}"
+
+
+def load_and_plot_curvature(sample_id):
+    try:
+        sample_id = int(sample_id)
+    except ValueError:
+        return None, None, "❌ sample_id must be an integer."
+
+    db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_raw")
+    doc = db_handler.collection.find_one({"sample_id": sample_id})
+
+    if not doc or "curvature_data" not in doc:
+        return None, None, f"❌ No stored curvature data for sample_id {sample_id}. Run computation first."
+
+    data = doc["curvature_data"]
+    arc_lengths = np.array(data["arc_lengths"])
+    curvature = np.array(data["curvature"])
+
+    # --- Line plot ---
+    buf1 = io.BytesIO()
+    plt.figure(figsize=(10, 4))
+    plt.axhline(0, color="gray", linestyle="--")
+    plt.plot(arc_lengths, curvature, color="black")
+    plt.title(f"Curvature along arc length (sample {sample_id})")
+    plt.xlabel("Normalized arc length")
+    plt.ylabel("Curvature κ")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(buf1, format="png")
+    plt.close()
+    buf1.seek(0)
+    curvature_plot_img = Image.open(buf1)
+
+    # --- Color map plot ---
+    # You must reload the path to reconstruct points for color plotting
+    svg_file_like = io.StringIO(doc["cleaned_svg"])
+    paths, _ = svg2paths(svg_file_like)
+    path = paths[0]
+    n_samples = len(curvature)
+    ts = np.linspace(0, 1, n_samples)
+    points = np.array([path.point(t) for t in ts])
+    points = np.column_stack((points.real, points.imag))
+
+    settings = data["settings"]
+
+    smooth_method = settings.get("smooth_method") or settings.get("method")
+    smooth_factor = settings.get("smooth_factor", 0.02)
+    smooth_window = settings.get("smooth_window", 15)
+
+    points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
+
+    segments = np.stack([points[:-1], points[1:]], axis=1)
+    norm = Normalize(vmin=-np.max(np.abs(curvature)), vmax=np.max(np.abs(curvature)) * 0.8)
+
+    buf2 = io.BytesIO()
+    fig, ax = plt.subplots(figsize=(6, 6))
+    lc = LineCollection(segments, cmap="coolwarm", norm=norm)
+    lc.set_array(curvature)
+    lc.set_linewidth(2)
+    ax.add_collection(lc)
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+    ax.autoscale()
+    ax.set_title("Curvature Color Map")
+    plt.colorbar(lc, ax=ax, label="Curvature κ")
+    plt.tight_layout()
+    plt.savefig(buf2, format="png")
+    plt.close()
+    buf2.seek(0)
+    curvature_color_img = Image.open(buf2)
+
+    return curvature_plot_img, curvature_color_img, f"✅ Displaying stored curvature for sample_id {sample_id}"
+
+
 def analyze_svg_curvature(sample_id, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
     """
     Analyze curvature directly from the cleaned SVG stored in the database.
@@ -212,6 +393,17 @@ def analyze_svg_curvature(sample_id, smooth_method="savgol", smooth_factor=0.02,
     curvature = curvature_from_points(points)
     arc_lengths = np.concatenate(([0], np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))))
     arc_lengths /= arc_lengths[-1]
+
+    # store 1D line in DB
+    db_handler.store_curvature_in_db(
+        sample_id,
+        arc_lengths,
+        curvature,
+        smooth_method,
+        smooth_factor,
+        smooth_window,
+        n_samples
+    )
 
     # --- Generate plots ---
     # Curvature line plot (1D plot)
