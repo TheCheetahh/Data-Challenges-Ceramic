@@ -85,7 +85,11 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
     with gr.Row():
         output_text = gr.Textbox(label="Status", interactive=False)
 
-    filename_input = gr.Textbox(label="sample_id of the svg to be displayed eg. 10001")
+    svg_id_list = db_handler.list_svg_ids()
+    svg_dropdown = gr.Dropdown(
+        choices=[str(sid) for sid in svg_id_list],
+        label="Select SVG to display"
+    )
     show_button = gr.Button("Show SVG")
 
     svg_output = gr.HTML()
@@ -112,7 +116,7 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
 
     show_button.click(
         fn=show_svg_ui,
-        inputs=[filename_input],
+        inputs=[svg_dropdown],
         outputs=svg_output
     )
 

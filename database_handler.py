@@ -171,3 +171,13 @@ class MongoDBHandler:
             return None, f"⚠️ No cleaned SVG stored for sample_id {sample_id}."
 
         return cleaned_svg, None
+
+
+    def list_svg_ids(self):
+        """
+        Return a sorted list of sample_ids for all SVGs in 'svg_raw'.
+        """
+        self.use_collection("svg_raw")
+        docs = self.collection.find({}, {"sample_id": 1})
+        sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]
+        return sorted(sample_ids)
