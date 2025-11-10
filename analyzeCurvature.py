@@ -176,6 +176,7 @@ def analyze_svg_curvature(svg_file, output_dir, smooth_method, smooth_factor, sm
 
 
 def analyse_svg():
+    """analyse svg. This function currently only cleans the svg"""
     db_handler = MongoDBHandler("svg_data")
     message = clean_all_svgs(db_handler)
 

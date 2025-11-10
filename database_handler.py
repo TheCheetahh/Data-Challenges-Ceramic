@@ -29,15 +29,14 @@ class MongoDBHandler:
 
 
     def insert(self, document):
+        """insert document into current collection."""
         if self.collection is None:
             raise ValueError("No collection selected.")
         return self.collection.insert_one(document)
 
 
     def insert_svg_files(self, files):
-        """
-        Insert multiple SVG files into the collection svg_raw.
-        """
+        """Insert multiple SVG files into the collection svg_raw."""
         messages = [] # return string list
 
         # if no files were uploaded
@@ -52,15 +51,17 @@ class MongoDBHandler:
         # duplicate entries will not be inserted but counted
         duplicate_counter = 0
 
+        # upload each file
         for svg_file in files:
             try:
-                # open each file
+                # open file
                 with open(svg_file.name, "r", encoding="utf-8") as f:
                     content = f.read()
 
                     # Extract just the file name (without path) and the sample_id (svg have unnecessary recons in name)
                     filename_only = os.path.basename(svg_file.name)
                     sample_id = int(filename_only.split("_")[1].split(".")[0])
+
                     # Check if the file is already in the database
                     if self.collection.find_one({"filename": filename_only}):
                         duplicate_counter += 1
@@ -86,9 +87,7 @@ class MongoDBHandler:
 
 
     def add_csv_data(self, csv_file):
-        """
-        Add CSV data to the SVG documents in the database.
-        """
+        """Add CSV data to the SVG documents in the database."""
         if csv_file is None:
             return "⚠️ No CSV file provided."
 
@@ -126,6 +125,7 @@ class MongoDBHandler:
                 skipped_count += 1
                 continue
 
+            # if the sample_id of a svg in the database has a corresponding sample_id in the csv
             if sample_id in csv_lookup:
                 info = csv_lookup[sample_id]
                 # Update the document in MongoDB with CSV fields
@@ -146,15 +146,18 @@ class MongoDBHandler:
 
 
     def find(self, filter_query=None):
+        """find all documents matching the provided filter."""
         if self.collection is None:
             raise ValueError("No collection selected.")
         return self.collection.find(filter_query or {})
 
 
     def close(self):
+        """close the connection to the database."""
         self.client.close()
 
     def get_cleaned_svg(self, sample_id):
+        """gets a cleaned SVG from the database."""
         self.use_collection("svg_raw")
 
         try:
@@ -174,9 +177,7 @@ class MongoDBHandler:
 
 
     def list_svg_ids(self):
-        """
-        Return a sorted list of sample_ids for all SVGs in 'svg_raw'.
-        """
+        """Return a sorted list of sample_ids for all SVGs in 'svg_raw'."""
         self.use_collection("svg_raw")
         docs = self.collection.find({}, {"sample_id": 1})
         sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]

@@ -1,4 +1,3 @@
-from database_handler import MongoDBHandler
 from app import demo
 
 
@@ -7,7 +6,6 @@ def main():
 
     # launch web ui (http://127.0.0.1:7860/)
     demo.launch()
-
 
 
 if __name__ == "__main__":

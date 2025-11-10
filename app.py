@@ -34,9 +34,7 @@ def run_analysis(svg_file, output_dir, smooth_method, smooth_factor, smooth_wind
 
 
 def format_svg_for_display(cleaned_svg):
-    """
-    Wrap the SVG in a bordered white box for display on the web page.
-    """
+    """Wrap the SVG in a bordered white box for display on the web page."""
     return f"""
     <div style="
         border: 2px solid black;
@@ -49,6 +47,7 @@ def format_svg_for_display(cleaned_svg):
     """
 
 def show_svg_ui(sample_id):
+    """Get SVG by sample_id. and format it for display."""
     cleaned_svg, error = db_handler.get_cleaned_svg(sample_id)
     if error:
         return f"<p style='color:red;'>{error}</p>"
@@ -56,44 +55,56 @@ def show_svg_ui(sample_id):
     return format_svg_for_display(cleaned_svg)
 
 
-with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
+# main webpage code
+with gr.Blocks(title="Ceramics Analysis") as demo:
     db_handler = MongoDBHandler("svg_data")
 
-    gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nLade eine SVG-Datei hoch und analysiere die Krümmung des Pfads.")
+    with gr.Tabs():
+        # Tab for all upload related things
+        with gr.Tab("Manage files"):
+            gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nLade SVG-Dateien hoch und füge zusätzliche information mittels CSV-Datai hinzu.")
 
-    # svg upload
-    with gr.Row():
-        svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"], file_count="multiple")
-        svg_upload_button = gr.Button("Upload .svg files")
+            # svg upload
+            with gr.Row():
+                svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"], file_count="multiple")
+                svg_upload_button = gr.Button("Upload .svg files")
 
-    # csv upload
-    with gr.Row():
-        csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"])
-        csv_upload_button = gr.Button("Upload .csv file")
+            # csv upload
+            with gr.Row():
+                csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"])
+                csv_upload_button = gr.Button("Upload .csv file")
 
-    with gr.Row():
-        output_dir_input = gr.Textbox(label="Ausgabeverzeichnis", value="./outputs")
+            # generate clean svg from raw svg in database
+            clean_svg_button = gr.Button("🚀 Clean SVG")
 
-    with gr.Row():
-        smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol", label="Glättungsmethode")
-        smooth_factor = gr.Slider(0, 0.1, value=0.02, step=0.005, label="Glättungsfaktor")
-        smooth_window_slider = gr.Slider(3, 51, value=15, step=2, label="Glättungsfenster")
-        samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
+            # status box is output for the messages from the buttons of this tab
+            with gr.Row():
+                output_text = gr.Textbox(label="Status", interactive=False)
 
-    clean_svg_button = gr.Button("🚀 Clean SVG")
+        # Tab for all analysis related tasks
+        with gr.Tab("Analyse files"):
+            gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nAnalysiere die SVG Dateien.")
 
-    with gr.Row():
-        output_text = gr.Textbox(label="Status", interactive=False)
+            # settings for curve smoothing
+            with gr.Row():
+                smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol", label="Glättungsmethode")
+                smooth_factor = gr.Slider(0, 0.1, value=0.02, step=0.005, label="Glättungsfaktor")
+                smooth_window_slider = gr.Slider(3, 51, value=15, step=2, label="Glättungsfenster")
+                samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
 
-    svg_id_list = db_handler.list_svg_ids()
-    svg_dropdown = gr.Dropdown(
-        choices=[str(sid) for sid in svg_id_list],
-        label="Select SVG to display"
-    )
-    show_button = gr.Button("Show SVG")
+            # dropdown to select a svg
+            svg_id_list = db_handler.list_svg_ids()
+            svg_dropdown = gr.Dropdown(
+                choices=[str(sid) for sid in svg_id_list],
+                label="Select SVG to display"
+            )
+            show_button = gr.Button("Show SVG")
 
-    svg_output = gr.HTML()
+            # output/display for the svg that was selected
+            svg_output = gr.HTML()
 
+
+# Button logic:
     # svg upload
     svg_upload_button.click(
         fn=db_handler.insert_svg_files,
@@ -119,5 +130,3 @@ with gr.Blocks(title="SVG-Krümmungsanalyse") as demo:
         inputs=[svg_dropdown],
         outputs=svg_output
     )
-
-demo.launch()
