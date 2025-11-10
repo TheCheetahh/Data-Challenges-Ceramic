@@ -29,14 +29,26 @@ The exact format of the csv should not matter, as the program detects it itself.
 
 Confirm the upload by pressing the Upload button
 
+> DO NOT FORGET TO PRESS CLEAN SVG
+
+Sorry for capslock. Not pressing should not cause any errors, but you cannot analyse until you press this for now.
+
+This gets rid of everything in the .svg except the most complex blob, which is used for analysis.
+
 ## Analyse files
 
 > Set settings for the analysis
 
 Select smoothing method and other properties
 
+Do not fiddle with it while comparing samples, as different settings will make the program recalculate all sample data with the new settings
+
 > Analyze .SVG
 
 Select the sample_id of an SVG from the dropdown. You can enter text to narrow down the options. An .SVG needs to be uploaded to the database before it can be selected here
 
-Press the Analyze Button to display the cleaned svg, the 1D curvature graph and the curvature color map
+Press the Analyze Button to display the cleaned svg, the 1D curvature graph and the curvature color map and the closest other sample with its calculated distance.
+
+Note: Depending on the "Abtastpunkte" the size of all distances will change, no matter how close or far the samples are from each other, as this settings essentially scales the distance between samples. 
+
+The first calculation for a given configuration can worst case take up to a few minutes, depending on your device.
