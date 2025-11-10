@@ -86,7 +86,7 @@ class MongoDBHandler:
         return "\n".join(messages)
 
 
-    def add_csv_data(self, csv_file):
+    def action_add_csv_data(self, csv_file):
         """Add CSV data to the SVG documents in the database."""
         if csv_file is None:
             return "⚠️ No CSV file provided."
@@ -195,10 +195,10 @@ class MongoDBHandler:
                     "arc_lengths": arc_lengths.tolist(),
                     "curvature": curvature.tolist(),
                     "smoothing_settings": {
-                        "method": smooth_method,
-                        "factor": smooth_factor,
-                        "window": smooth_window,
-                        "samples": n_samples
+                        "smooth_method": smooth_method,
+                        "smooth_factor": smooth_factor,
+                        "smooth_window": smooth_window,
+                        "n_samples": n_samples
                     }
                 }
             }},
