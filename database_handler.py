@@ -86,7 +86,7 @@ class MongoDBHandler:
         return "\n".join(messages)
 
 
-    def add_csv_data(self, csv_file):
+    def action_add_csv_data(self, csv_file):
         """Add CSV data to the SVG documents in the database."""
         if csv_file is None:
             return "⚠️ No CSV file provided."
@@ -182,3 +182,25 @@ class MongoDBHandler:
         docs = self.collection.find({}, {"sample_id": 1})
         sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]
         return sorted(sample_ids)
+
+
+    def store_curvature_in_db(self, sample_id, arc_lengths, curvature, smooth_method, smooth_factor, smooth_window,
+                              n_samples):
+        """store the 1D curvature values"""
+        self.use_collection("svg_raw")
+        self.collection.update_one(
+            {"sample_id": int(sample_id)},
+            {"$set": {
+                "curvature_data": {
+                    "arc_lengths": arc_lengths.tolist(),
+                    "curvature": curvature.tolist(),
+                    "smoothing_settings": {
+                        "smooth_method": smooth_method,
+                        "smooth_factor": smooth_factor,
+                        "smooth_window": smooth_window,
+                        "n_samples": n_samples
+                    }
+                }
+            }},
+            upsert=False
+        )
