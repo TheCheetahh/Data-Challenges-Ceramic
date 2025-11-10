@@ -1,6 +1,8 @@
 # Data-Challenges-Ceramic
 Repository for the Ceramic Challenge
 
+We work on the dev branch. Whenever you want to work on the project, create a new feature branch. If the feature branch has no issues, you can create a pull request and merge it with dev
+
 ## Dependency:
 
 >python 3.10 - 3.12 (python 3.13 is too new for the MongoDB package)
