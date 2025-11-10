@@ -11,6 +11,7 @@ def estimate_path_complexity(d):
     numbers = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", d)
     return len(numbers)
 
+
 def filter_most_complex_black_fill(input_path, output_path):
     """
     Behalte nur das komplexeste schwarze Objekt (fill='#000000' oder 'black') im SVG.

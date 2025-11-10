@@ -31,10 +31,12 @@ Confirm the upload by pressing the Upload button
 
 ## Analyse files
 
-> Select .SVG to analyse
+> Set settings for the analysis
+
+Select smoothing method and other properties
+
+> Analyze .SVG
 
 Select the sample_id of an SVG from the dropdown. You can enter text to narrow down the options. An .SVG needs to be uploaded to the database before it can be selected here
 
-> Show .SVG
-
-You can display the SVG by pressing the corresponding button
+Press the Analyze Button to display the cleaned svg, the 1D curvature graph and the curvature color map
