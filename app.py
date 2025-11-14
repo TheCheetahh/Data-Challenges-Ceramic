@@ -168,8 +168,8 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
             with gr.Row():
                 smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
                                                      label="Glättungsmethode")
-                smooth_factor = gr.Slider(0, 0.1, value=0.02, step=0.005, label="Glättungsfaktor")
-                smooth_window_slider = gr.Slider(3, 51, value=15, step=2, label="Glättungsfenster")
+                smooth_factor = gr.Slider(0, 5, value=3, step=0.005, label="Glättungsfaktor")
+                smooth_window_slider = gr.Slider(3, 300, value=150, step=2, label="Glättungsfenster")
                 samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
 
             # status box
