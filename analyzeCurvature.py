@@ -60,8 +60,10 @@ def normalize_path(points, smooth_method, smooth_factor, smooth_window):
     """Pfad auf Startpunkt (0,0) verschieben und optional ausrichten."""
     points = points - points[0]
 
-    align_orientation=True
+    '''
+    align_orientation=False
     if align_orientation:
+
         dx, dy = points[1] - points[0]
         angle = -np.arctan2(dy, dx)
         rot_matrix = np.array([[np.cos(angle), -np.sin(angle)],
@@ -83,8 +85,7 @@ def normalize_path(points, smooth_method, smooth_factor, smooth_window):
         ])
 
         # 4. Alle Punkte um den Startpunkt rotieren
-        points = (points - p_start) @ rotation_matrix.T
-
+        points = (points - p_start) @ rotation_matrix.T'''
 
     # === Glättungsoptionen ===
     SMOOTHING_METHOD = smooth_method   # "savgol", "gaussian", "bspline" oder "none"
@@ -297,6 +298,13 @@ def compute_or_load_curvature(sample_id, smooth_method="savgol", smooth_factor=0
         # Normalize & smooth
         points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
 
+        # === Direction ===
+        diffs = np.diff(points, axis=0)
+        directions = np.arctan2(diffs[:, 1], diffs[:, 0])             # Angle of every segment to x-axis
+
+        # Länge der Arrays angleichen
+        directions = np.concatenate(([directions[0]], directions))
+
         # Curvature
         curvature = curvature_from_points(points)
         arc_lengths = np.concatenate(([0], np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))))
@@ -336,6 +344,7 @@ def compute_or_load_curvature(sample_id, smooth_method="savgol", smooth_factor=0
         points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
 
     # --- Generate 1D line plot ---
+    curvature = -curvature #einfach nur weil positive Zahlen hübscher sind
     buf1 = io.BytesIO()
     plt.figure(figsize=(10, 4))
     plt.axhline(0, color="gray", linestyle="--")
@@ -359,9 +368,9 @@ def compute_or_load_curvature(sample_id, smooth_method="savgol", smooth_factor=0
     lc.set_array(curvature)
     lc.set_linewidth(2)
     ax.add_collection(lc)
+    ax.invert_yaxis()
     ax.autoscale()
     ax.set_aspect("equal")
-    ax.invert_yaxis()
     ax.set_title("Curvature Color Map")
     plt.colorbar(lc, ax=ax, label="Curvature κ")
     plt.tight_layout()
@@ -370,7 +379,23 @@ def compute_or_load_curvature(sample_id, smooth_method="savgol", smooth_factor=0
     buf2.seek(0)
     curvature_color_img = Image.open(buf2)
 
-    return curvature_plot_img, curvature_color_img, status_msg
+    # --- Generate direction plot ---
+    directions = -directions #einfach nur weil positive Zahlen hübscher sind
+    directions = np.unwrap(directions)
+    buf3 = io.BytesIO()
+    plt.figure(figsize=(10, 4))
+    plt.plot(arc_lengths, directions, color="blue")
+    plt.title(f"Direction along normalized arc length (sample {sample_id})")
+    plt.xlabel("Normalised arc length")
+    plt.ylabel("Angle to x-Axis [rad]")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(buf3, format="png")
+    plt.close()
+    buf3.seek(0)
+    angle_plot_img = Image.open(buf3)
+
+    return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
 def action_analyse_svg():
