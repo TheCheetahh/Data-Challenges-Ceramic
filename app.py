@@ -96,6 +96,10 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
         closest_color_img = None
         closest_id_text = "No closest match found"
 
+    # Get the type of the sample from the database
+    sample_type = db_handler.get_sample_type(sample_id)
+    closest_type = db_handler.get_sample_type(closest_id)
+
     # Combine status messages
     final_status_message = f"{compute_status}\n{status_msg}"
 
