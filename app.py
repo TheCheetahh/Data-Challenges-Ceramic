@@ -115,7 +115,9 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
         closest_plot_img,          # Closest curvature line plot
         closest_color_img,         # Closest curvature color map
         closest_angle_img,
-        closest_id_text            # Text showing closest sample ID + distance
+        closest_id_text,            # Text showing closest sample ID + distance
+        sample_type,
+        closest_type
     )
 
 
@@ -193,6 +195,13 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
                     )
                     analyze_button = gr.Button("Analyze SVG")
 
+                    sample_type_output = gr.Textbox(
+                        label="Sample Type",
+                        interactive=True
+                    )
+
+                    save_type_button = gr.Button("Save changes")
+
                     svg_output = gr.HTML(
                         value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
                     )
@@ -203,7 +212,18 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
                 # Right column: closest svg
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Closest Match")
+
                     closest_sample_id_output = gr.Textbox(label="Closest Sample ID", interactive=False)
+
+                    closest_type_output = gr.Textbox(
+                        label="Closest Sample Type",
+                        interactive=True
+                    )
+
+                    with gr.Row():
+                        previous_sample_button = gr.Button("<-")
+                        next_sample_button = gr.Button("->")
+
                     closest_svg_output = gr.HTML(value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
                     closest_curvature_plot_output = gr.Image(label="Curvature Plot")
                     closest_curvature_color_output = gr.Image(label="Curvature Color Map")
@@ -235,6 +255,10 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
         fn=action_show_and_analyze_svg,
         inputs=[svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[svg_output, curvature_plot_output, curvature_color_output, angle_plot_output, status_output, closest_svg_output,
-            closest_curvature_plot_output, closest_curvature_color_output, closest_angle_plot_output, closest_sample_id_output
+            closest_curvature_plot_output, closest_curvature_color_output, closest_angle_plot_output, closest_sample_id_output, sample_type_output, closest_type_output
         ]
     )
+
+    save_type_button.click()
+    previous_sample_button.click()
+    next_sample_button.click()
