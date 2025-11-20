@@ -67,7 +67,7 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
     )
 
     # Compute or load curvature for selected sample
-    curvature_plot_img, curvature_color_img, status_msg = compute_or_load_curvature(
+    curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = compute_or_load_curvature(
         sample_id, smooth_method, smooth_factor, smooth_window, n_samples
     )
 
@@ -82,7 +82,7 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
             closest_svg_html = format_svg_for_display(closest_svg_content)
 
         # Load its curvature data
-        closest_plot_img, closest_color_img, _ = compute_or_load_curvature(
+        closest_plot_img, closest_color_img, closest_angle_img, _ = compute_or_load_curvature(
             closest_id,
             smooth_method=smooth_method,
             smooth_factor=smooth_factor,
@@ -94,6 +94,7 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
         closest_svg_html = "<p>No closest match found</p>"
         closest_plot_img = None
         closest_color_img = None
+        closest_angle_img = None
         closest_id_text = "No closest match found"
 
     # Get the type of the sample from the database
@@ -108,10 +109,12 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
         svg_html,                  # Selected SVG
         curvature_plot_img,        # Selected curvature line plot
         curvature_color_img,       # Selected curvature color map
+        angle_plot_img,
         final_status_message,      # Status message for selected sample
         closest_svg_html,          # Closest SVG
         closest_plot_img,          # Closest curvature line plot
         closest_color_img,         # Closest curvature color map
+        closest_angle_img,
         closest_id_text            # Text showing closest sample ID + distance
     )
 
@@ -172,8 +175,8 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
             with gr.Row():
                 smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
                                                      label="Glättungsmethode")
-                smooth_factor = gr.Slider(0, 5, value=3, step=0.005, label="Glättungsfaktor")
-                smooth_window_slider = gr.Slider(3, 300, value=150, step=2, label="Glättungsfenster")
+                smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Glättungsfaktor")
+                smooth_window_slider = gr.Slider(3, 351, value=125, step=10, label="Glättungsfenster")
                 samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
 
             # status box
@@ -195,6 +198,7 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
                     )
                     curvature_plot_output = gr.Image(label="Curvature Plot")
                     curvature_color_output = gr.Image(label="Curvature Color Map")
+                    angle_plot_output = gr.Image(label="Angle Plot")
 
                 # Right column: closest svg
                 with gr.Column(scale=1, min_width=400):
@@ -203,6 +207,7 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
                     closest_svg_output = gr.HTML(value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
                     closest_curvature_plot_output = gr.Image(label="Curvature Plot")
                     closest_curvature_color_output = gr.Image(label="Curvature Color Map")
+                    closest_angle_plot_output = gr.Image(label="Angle Plot")
 
 
 # Button logic:
@@ -229,7 +234,7 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
     analyze_button.click(
         fn=action_show_and_analyze_svg,
         inputs=[svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
-        outputs=[svg_output, curvature_plot_output, curvature_color_output, status_output, closest_svg_output,
-            closest_curvature_plot_output, closest_curvature_color_output, closest_sample_id_output
+        outputs=[svg_output, curvature_plot_output, curvature_color_output, angle_plot_output, status_output, closest_svg_output,
+            closest_curvature_plot_output, closest_curvature_color_output, closest_angle_plot_output, closest_sample_id_output
         ]
     )
