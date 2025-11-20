@@ -5,7 +5,7 @@ We work on the dev branch. Whenever you want to work on the project, create a ne
 
 ## Dependency:
 
->python 3.10 - 3.12 (python 3.13 is too new for the MongoDB package)
+>python 3.12 (python 3.13 is too new for the MongoDB package and everything else is too old)
 
 >MongoDB(Download: https://www.mongodb.com/try/download/community)
 
@@ -23,7 +23,7 @@ Upload the svg with their full names as they are (Eg. recons_10001.svg), the pro
 
 > .CSV uploads
 
-Open the excel file and save it as a .csv
+Open the excel file and save it as a .csv. Use ";" as separators (it is a german excel table)
 
 There are still issues with the quality of the data: Duplicate entries are more or less ignored and multiple entries in one cell are stored as just one value
 

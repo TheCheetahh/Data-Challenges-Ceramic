@@ -156,6 +156,7 @@ class MongoDBHandler:
         """close the connection to the database."""
         self.client.close()
 
+
     def get_cleaned_svg(self, sample_id):
         """gets a cleaned SVG from the database."""
         self.use_collection("svg_raw")
@@ -204,3 +205,14 @@ class MongoDBHandler:
             }},
             upsert=False
         )
+
+
+    def get_sample_type(self, sample_id):
+        """get sample type from database"""
+        db = MongoDBHandler("svg_data")
+        db.use_collection("svg_raw")
+
+        doc = db.collection.find_one({"sample_id": int(sample_id)}, {"Typ": 1})
+        if not doc:
+            return None
+        return doc.get("Typ", None)
