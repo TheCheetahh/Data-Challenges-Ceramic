@@ -1,4 +1,4 @@
-from app import demo
+from web_interface.app import demo
 
 
 def main():
