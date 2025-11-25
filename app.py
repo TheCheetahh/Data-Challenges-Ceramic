@@ -1,6 +1,22 @@
 import gradio as gr
-from analyzeCurvature import action_analyse_svg, find_closest_curvature, compute_or_load_curvature, compute_and_store_curvature_for_all
+from analyzeCurvature import (action_analyse_svg, find_closest_curvature, compute_or_load_curvature,
+                              compute_and_store_curvature_for_all)
 from database_handler import MongoDBHandler
+
+
+def action_save_sample_type(sample_id, new_type):
+    db = MongoDBHandler("svg_data")
+    db.use_collection("svg_raw")
+
+    # Validate ID
+    try:
+        sample_id = int(sample_id)
+    except (ValueError, TypeError):
+        return "❌ Invalid sample ID."
+
+    # Update type field
+    success, msg = db.update_type(sample_id, new_type)
+    return msg
 
 
 def action_store_svg(svg_input):
@@ -259,6 +275,11 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
         ]
     )
 
-    save_type_button.click()
+    save_type_button.click(
+        fn=action_save_sample_type,
+        inputs=[svg_dropdown, sample_type_output],  # using svg_dropdown might cause issues
+        outputs=[status_output_text]
+    )
+
     previous_sample_button.click()
     next_sample_button.click()

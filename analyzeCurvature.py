@@ -47,7 +47,7 @@ def curvature_from_points(points):
     ddy = np.gradient(dy, edge_order=2)
 
     # signierte Krümmung (Vorzeichen abhängig von Richtung)
-    epsilon = 1e-10 # verhindert divide by zero
+    epsilon = 1e-10  # verhindert divide by zero
     curvature = (dx * ddy - dy * ddx) / (dx ** 2 + dy ** 2 + epsilon) ** 1.5
     curvature[np.isnan(curvature)] = 0
 
@@ -173,7 +173,8 @@ def compute_and_store_curvature_for_all(smooth_method="savgol", smooth_factor=0.
     return f"✅ Recomputed: {processed}, ⏭️ Skipped (same settings): {skipped}, ❌ Errors: {errors}"
 
 
-def compute_and_store_curvature(sample_id, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
+def compute_and_store_curvature(sample_id, smooth_method="savgol",
+                                smooth_factor=0.02, smooth_window=15, n_samples=2000):
     """
     computes and stores curvature data for a single sample.
 
@@ -300,7 +301,7 @@ def compute_or_load_curvature(sample_id, smooth_method="savgol", smooth_factor=0
 
         # === Direction ===
         diffs = np.diff(points, axis=0)
-        directions = np.arctan2(diffs[:, 1], diffs[:, 0])             # Angle of every segment to x-axis
+        directions = np.arctan2(diffs[:, 1], diffs[:, 0])  # Angle of every segment to x-axis
 
         # Länge der Arrays angleichen
         directions = np.concatenate(([directions[0]], directions))
@@ -344,7 +345,7 @@ def compute_or_load_curvature(sample_id, smooth_method="savgol", smooth_factor=0
         points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
 
     # --- Generate 1D line plot ---
-    curvature = -curvature #einfach nur weil positive Zahlen hübscher sind
+    curvature = -curvature  # einfach nur, weil positive Zahlen hübscher sind
     buf1 = io.BytesIO()
     plt.figure(figsize=(10, 4))
     plt.axhline(0, color="gray", linestyle="--")
@@ -380,7 +381,7 @@ def compute_or_load_curvature(sample_id, smooth_method="savgol", smooth_factor=0
     curvature_color_img = Image.open(buf2)
 
     # --- Generate direction plot ---
-    directions = -directions #einfach nur weil positive Zahlen hübscher sind
+    directions = -directions  # einfach nur, weil positive Zahlen hübscher sind
     directions = np.unwrap(directions)
     buf3 = io.BytesIO()
     plt.figure(figsize=(10, 4))
@@ -460,31 +461,3 @@ def find_closest_curvature(sample_id):
         return None, None, "No other samples with curvature data found."
 
     return closest_id, min_distance, f"Closest sample to {sample_id} is {closest_id} with distance {min_distance:.4f}"
-
-
-"""
-def main():
-    parser = argparse.ArgumentParser(description="Analyse eines SVG-Pfads (Krümmung etc.)")
-    parser.add_argument("--input_svg", type=str, required=True, help="Pfad zur Eingabe-SVG-Datei")
-    parser.add_argument("--output_dir", type=str, default="results", help="Ordner für Analyseergebnisse")
-    parser.add_argument("--smooth_method", default="savgol", help="savgol, gaussian, bspline oder none")
-    parser.add_argument("--smooth_factor", type=float, default=3, help="Bei Savgol: Polyorder (zB. 3), bei Gaussian: Sigma (zB. 2), bei Bspline: s (zB. 0.5)")
-    parser.add_argument("--smooth_window", type=int, default=51, help="Wird nur bei Savgol gebraucht, muss ungerade sein")
-    parser.add_argument("--samples", type=int, default=2000, help="Anzahl der Abtastpunkte entlang des Pfads")
-
-    args = parser.parse_args()
-
-    os.makedirs(args.output_dir, exist_ok=True)
-    analyze_svg_curvature(
-        args.input_svg,
-        args.output_dir,
-        args.smooth_method,
-        args.smooth_factor,
-        args.smooth_window,
-        args.samples
-    )
-
-
-if __name__ == "__main__":
-    main()
-"""
