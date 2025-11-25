@@ -49,8 +49,12 @@ Do not fiddle with it while comparing samples, as different settings will make t
 
 Select the sample_id of an SVG from the dropdown. You can enter text to narrow down the options. An .SVG needs to be uploaded to the database before it can be selected here
 
-Press the Analyze Button to display the cleaned svg, the 1D curvature graph and the curvature color map and the closest other sample with its calculated distance.
+Press the Analyze Button to display the cleaned svg, the 1D curvature graph, curvature color map and angle diagram and the closest other sample with its calculated distance.
 
 Note: Depending on the "Abtastpunkte" the size of all distances will change, no matter how close or far the samples are from each other, as this settings essentially scales the distance between samples. 
 
 The first calculation for a given configuration can worst case take up to a few minutes, depending on your device.
+
+The type field displays the type of the sample. It can be edited and the changes can be saved by pressing the save button.
+
+The two arrows on the right column can display the 4 next closest samples. 

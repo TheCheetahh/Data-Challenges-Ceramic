@@ -1,5 +1,5 @@
 from database_handler import MongoDBHandler
-from cleanSVG import clean_all_svgs
+from analysis.clean_SVG import clean_all_svgs
 
 
 def click_clean_svg():
