@@ -4,6 +4,72 @@ from analyzeCurvature import (action_analyse_svg, find_closest_curvature, comput
 from database_handler import MongoDBHandler
 
 
+def show_prev_closest(current_sample_id, closest_list, current_index):
+    if not closest_list:
+        return (
+            "<p>No closest samples stored.</p>",
+            None,
+            None,
+            "",
+            0,
+            "No closest samples stored."
+        )
+
+    new_index = (current_index - 1) % len(closest_list)
+    prev_id = closest_list[new_index]
+
+    db = MongoDBHandler("svg_data")
+
+    # Load SVG
+    svg, err = db.get_cleaned_svg(prev_id)
+    svg_html = format_svg_for_display(svg) if not err else f"<p>Error: {err}</p>"
+
+    # Load curvature plots
+    plot_img, color_img, angle_plot_img, status_msg = compute_or_load_curvature(prev_id)
+
+    # Load type
+    doc = db.collection.find_one({"sample_id": prev_id}, {"Typ": 1})
+    typ_text = doc.get("Typ", "") if doc else ""
+
+    label_text = f"Closest match #{new_index+1}: {prev_id}"
+
+    return svg_html, plot_img, color_img, angle_plot_img, typ_text, new_index, label_text
+
+
+
+def show_next_closest(current_sample_id, closest_list, current_index):
+    if not closest_list:
+        return (
+            "<p>No closest samples stored.</p>",
+            None,
+            None,
+            "",
+            0,
+            "No closest samples stored."
+        )
+
+    new_index = (current_index + 1) % len(closest_list)
+    next_id = closest_list[new_index]
+
+    db = MongoDBHandler("svg_data")
+
+    # Load SVG
+    svg, err = db.get_cleaned_svg(next_id)
+    svg_html = format_svg_for_display(svg) if not err else f"<p>Error: {err}</p>"
+
+    # Load curvature plots (will not recompute — just loads)
+    plot_img, color_img, angle_plot_img, status_msg = compute_or_load_curvature(next_id)
+
+    # Load type field
+    doc = db.collection.find_one({"sample_id": next_id}, {"Typ": 1})
+    typ_text = doc.get("Typ", "") if doc else ""
+
+    label_text = f"Closest match #{new_index+1}: {next_id}"
+
+    return svg_html, plot_img, color_img, angle_plot_img, typ_text, new_index, label_text
+
+
+
 def action_save_sample_type(sample_id, new_type):
     db = MongoDBHandler("svg_data")
     db.use_collection("svg_raw")
@@ -117,6 +183,13 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
     sample_type = db_handler.get_sample_type(sample_id)
     closest_type = db_handler.get_sample_type(closest_id)
 
+    # Load the full list of closest matches from DB
+    closest_matches = db_handler.get_closest_matches(sample_id)
+    closest_ids = [m["id"] for m in closest_matches]
+
+    # Reset navigation state
+    current_index = 0  # first one shown is index 0
+
     # Combine status messages
     final_status_message = f"{compute_status}\n{status_msg}"
 
@@ -133,7 +206,9 @@ def action_show_and_analyze_svg(sample_id, smooth_method, smooth_factor, smooth_
         closest_angle_img,
         closest_id_text,            # Text showing closest sample ID + distance
         sample_type,
-        closest_type
+        closest_type,
+        closest_ids,
+        current_index
     )
 
 
@@ -162,6 +237,11 @@ def format_svg_for_display(cleaned_svg):
 # main webpage code
 with gr.Blocks(title="Ceramics Analysis") as demo:
     db_handler = MongoDBHandler("svg_data")
+
+    # states work like a variable
+    current_sample_state = gr.State(None)
+    closest_list_state = gr.State([])
+    closest_index_state = gr.State(0)
 
     with gr.Tabs():
         # Tab for all upload related things
@@ -271,7 +351,8 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
         fn=action_show_and_analyze_svg,
         inputs=[svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[svg_output, curvature_plot_output, curvature_color_output, angle_plot_output, status_output, closest_svg_output,
-            closest_curvature_plot_output, closest_curvature_color_output, closest_angle_plot_output, closest_sample_id_output, sample_type_output, closest_type_output
+            closest_curvature_plot_output, closest_curvature_color_output, closest_angle_plot_output, closest_sample_id_output, sample_type_output, closest_type_output, closest_list_state,
+            closest_index_state
         ]
     )
 
@@ -281,5 +362,30 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
         outputs=[status_output_text]
     )
 
-    previous_sample_button.click()
-    next_sample_button.click()
+    next_sample_button.click(
+        fn=show_next_closest,
+        inputs=[current_sample_state, closest_list_state, closest_index_state],
+        outputs=[
+            closest_svg_output,  # svg_html
+            closest_curvature_plot_output,  # plot_img
+            closest_curvature_color_output,  # color_img
+            closest_angle_plot_output,  # angle_plot_img
+            closest_type_output,  # typ_text
+            closest_index_state,  # new_index
+            closest_sample_id_output  # label_text
+        ]
+    )
+
+    previous_sample_button.click(
+        fn=show_prev_closest,
+        inputs=[current_sample_state, closest_list_state, closest_index_state],
+        outputs=[
+            closest_svg_output,  # svg_html
+            closest_curvature_plot_output,  # plot_img
+            closest_curvature_color_output,  # color_img
+            closest_angle_plot_output,  # angle_plot_img
+            closest_type_output,  # typ_text
+            closest_index_state,  # new_index
+            closest_sample_id_output  # label_text
+        ]
+    )

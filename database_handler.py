@@ -237,3 +237,20 @@ class MongoDBHandler:
             return False, f"❌ No document found with sample_id {sample_id}"
 
         return True, f"✅ Updated type for sample_id {sample_id} to '{new_type}'"
+
+    def save_closest_matches(self, sample_id, matches):
+        """
+        Save [{'id': X, 'distance': Y}, ...] for sample_id.
+        """
+        self.collection.update_one(
+            {"sample_id": sample_id},
+            {"$set": {"closest_matches": matches}},
+            upsert=True
+        )
+
+    def get_closest_matches(self, sample_id):
+        doc = self.collection.find_one(
+            {"sample_id": sample_id},
+            {"closest_matches": 1}
+        )
+        return doc.get("closest_matches", []) if doc else []

@@ -432,17 +432,21 @@ def find_closest_curvature(sample_id):
     target_curvature = np.array(doc["curvature_data"]["curvature"])
 
     # Iterate over all other documents
-    min_distance = float("inf")
-    closest_id = None
+    distances = []  # list of (other_id, dist)
+    cursor = db_handler.collection.find(
+        {"sample_id": {"$ne": sample_id}},
+        {"sample_id": 1, "curvature_data": 1}
+    )
 
-    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
-                                                {"sample_id": 1, "curvature_data": 1}):
-        other_id = other_doc["sample_id"]
-        if "curvature_data" not in other_doc:
+    for other_doc in cursor:
+        oid = other_doc["sample_id"]
+        data = other_doc.get("curvature_data")
+        if not data:
             continue
-        other_curve = np.array(other_doc["curvature_data"]["curvature"])
 
-        # If lengths differ, interpolate to match
+        other_curve = np.array(data["curvature"])
+
+        # Interpolate if necessary
         if len(other_curve) != len(target_curvature):
             other_curve = np.interp(
                 np.linspace(0, 1, len(target_curvature)),
@@ -450,14 +454,26 @@ def find_closest_curvature(sample_id):
                 other_curve
             )
 
-        # Compute Euclidean distance
         dist = np.linalg.norm(target_curvature - other_curve)
+        distances.append((oid, dist))
 
-        if dist < min_distance:
-            min_distance = dist
-            closest_id = other_id
+    if not distances:
+        return None, None, "No comparable samples found."
 
-    if closest_id is None:
-        return None, None, "No other samples with curvature data found."
+    # Sort & take top-k (5)
+    top_k = 5
+    distances.sort(key=lambda x: x[1])
+    top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
 
-    return closest_id, min_distance, f"Closest sample to {sample_id} is {closest_id} with distance {min_distance:.4f}"
+    # Store into DB
+    db_handler.collection.update_one(
+        {"sample_id": sample_id},
+        {"$set": {"closest_matches": top_matches}}
+    )
+
+    # Return first (closest) for compatibility
+    closest_id = top_matches[0]["id"]
+    closest_dist = top_matches[0]["distance"]
+    msg = f"Closest sample to {sample_id} is {closest_id} (distance={closest_dist:.6f})"
+
+    return closest_id, closest_dist, msg
