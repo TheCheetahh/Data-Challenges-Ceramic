@@ -37,7 +37,7 @@ class MongoDBHandler:
 
     def insert_svg_files(self, files):
         """Insert multiple SVG files into the collection svg_raw."""
-        messages = [] # return string list
+        messages = []  # return string list
 
         # if no files were uploaded
         if not files:
@@ -107,18 +107,20 @@ class MongoDBHandler:
         except Exception as e:
             return f"Error reading CSV: {e}"
 
-        # there are duplicate entries in the Excel/csv for the same sample_id. Need to figure this out and make git issue
+        # there are duplicate entries in the Excel/csv for the same sample_id. Need to figure this out and make git
+        # issue
         duplicates = csv_df["Sample.Id"][csv_df["Sample.Id"].duplicated()]
         if not duplicates.empty:
             print(f"⚠️ Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
         # csv_df_grouped = csv_df.groupby("Sample.Id").first().reset_index() # group rejects all lines except the first
-        csv_df_grouped = csv_df.groupby("Sample.Id").agg(lambda x: '|'.join(map(str, x.dropna()))).reset_index() # merge all entries
+        # merge all entries
+        csv_df_grouped = csv_df.groupby("Sample.Id").agg(lambda x: '|'.join(map(str, x.dropna()))).reset_index()
         # Convert CSV to a dictionary for fast lookup: {Id: row_dict}
         csv_lookup = csv_df_grouped.set_index("Sample.Id").to_dict(orient="index")
 
         # Iterate over documents in the collection
         updated_count = 0
-        skipped_count = 0 # svgs that did not get new data from the csv
+        skipped_count = 0  # svgs that did not get new data from the csv
         for doc in self.find():
             sample_id = doc.get("sample_id")
             if not sample_id:
@@ -206,7 +208,6 @@ class MongoDBHandler:
             upsert=False
         )
 
-
     def get_sample_type(self, sample_id):
         """get sample type from database"""
         db = MongoDBHandler("svg_data")
@@ -216,3 +217,40 @@ class MongoDBHandler:
         if not doc:
             return None
         return doc.get("Typ", None)
+
+    def update_type(self, sample_id, new_type):
+        """Update the 'type' field of a document"""
+        try:
+            sample_id = int(sample_id)
+        except (ValueError, TypeError):
+            return False, "❌ sample_id must be an integer."
+
+        if not isinstance(new_type, str):
+            return False, "❌ new_type must be a string."
+
+        result = self.collection.update_one(
+            {"sample_id": sample_id},
+            {"$set": {"Typ": new_type}}
+        )
+
+        if result.matched_count == 0:
+            return False, f"❌ No document found with sample_id {sample_id}"
+
+        return True, f"✅ Updated type for sample_id {sample_id} to '{new_type}'"
+
+    def save_closest_matches(self, sample_id, matches):
+        """
+        Save [{'id': X, 'distance': Y}, ...] for sample_id.
+        """
+        self.collection.update_one(
+            {"sample_id": sample_id},
+            {"$set": {"closest_matches": matches}},
+            upsert=True
+        )
+
+    def get_closest_matches(self, sample_id):
+        doc = self.collection.find_one(
+            {"sample_id": sample_id},
+            {"closest_matches": 1}
+        )
+        return doc.get("closest_matches", []) if doc else []
