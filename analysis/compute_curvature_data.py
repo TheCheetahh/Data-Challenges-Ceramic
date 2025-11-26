@@ -122,6 +122,12 @@ def compute_curvature_for_one_sample(sample_id, smooth_method="savgol",
     arc_lengths = np.concatenate(([0], np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))))
     arc_lengths /= arc_lengths[-1]
 
+    # directions
+    diffs = np.diff(points, axis=0)
+    directions = np.arctan2(diffs[:, 1], diffs[:, 0])  # Angle of every segment to x-axis
+    # Länge der Arrays angleichen
+    directions = np.concatenate(([directions[0]], directions))
+
     # Store in DB
     db_handler.collection.update_one(
         {"sample_id": sample_id},
@@ -129,6 +135,7 @@ def compute_curvature_for_one_sample(sample_id, smooth_method="savgol",
             "curvature_data": {
                 "arc_lengths": arc_lengths.tolist(),
                 "curvature": curvature.tolist(),
+                "directions": directions.tolist(),
                 "settings": {
                     "smooth_method": smooth_method,
                     "smooth_factor": smooth_factor,
@@ -197,6 +204,7 @@ def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, sm
     curvature_data = doc["curvature_data"]
     arc_lengths = np.array(curvature_data["arc_lengths"])
     curvature = np.array(curvature_data["curvature"])
+    directions = np.array(curvature_data["directions"])
     status_msg = f"✅ Loaded stored curvature for sample_id {sample_id}"
 
     # Reconstruct points for color map
@@ -213,12 +221,6 @@ def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, sm
     smooth_factor = stored_settings.get("factor", smooth_factor)
     smooth_window = stored_settings.get("window", smooth_window)
     points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
-
-    # directions
-    diffs = np.diff(points, axis=0)
-    directions = np.arctan2(diffs[:, 1], diffs[:, 0])  # Angle of every segment to x-axis
-    # Länge der Arrays angleichen
-    directions = np.concatenate(([directions[0]], directions))
 
     # --- Generate 1D line plot ---
     curvature = -curvature  # einfach nur, weil positive Zahlen hübscher sind
