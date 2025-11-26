@@ -46,6 +46,12 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
 
             # settings for analysis
             with gr.Row():
+                distance_dataset = gr.Dropdown(choices=["only curvature", "cropped curvature",
+                                                       "only angle", "cropped angle", "cropped curvature and angle"],
+                                               label="Distanzberechnung Datensatz")
+                distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
+                                                        "Correlation Distance", "dynamic time warping", "integral difference"],
+                                               label="Distanzberechnung Datensatz")
                 smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
                                                      label="Glättungsmethode")
                 smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Glättungsfaktor")
@@ -124,7 +130,7 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
 
     analyze_button.click(
         fn=click_analyze_svg,
-        inputs=[svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        inputs=[distance_dataset, distance_calculation, svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
