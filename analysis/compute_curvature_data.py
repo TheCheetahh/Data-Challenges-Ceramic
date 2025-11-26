@@ -336,3 +336,80 @@ def find_closest_curvature(sample_id, top_k=5):
     msg = f"Closest sample to {sample_id} is {closest_id} (distance={closest_dist:.6f})"
 
     return closest_id, closest_dist, msg
+
+
+def find_enhanced_closest_curvature(sample_id, top_k=5):
+    """
+    Finds the top-k closest samples by curvature and stores them in the DB.
+
+    Returns the first closest sample id and distance, and message.
+    """
+
+    # convert sample id to int
+    try:
+        sample_id = int(sample_id)
+    except:
+        return None, None, f"Invalid sample_id {sample_id}"
+
+    # create db_handler
+    db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_raw")
+
+    # get doc and curve data
+    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if not doc or "curvature_data" not in doc:
+        return None, None, f"No curvature data for sample_id {sample_id}"
+    curvature = np.array(doc["curvature_data"]["curvature"])
+    direction = np.array(doc["curvature_data"]["directions"])
+
+    # calculate the distance to all other samples. Save in distances list
+    distances = []
+    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}}, {"sample_id": 1, "curvature_data": 1}):
+        oid = other_doc["sample_id"]
+        curvature_data = other_doc.get("curvature_data")
+        if not curvature_data:
+            continue
+        other_curvature = np.array(curvature_data["curvature"])
+        other_direction = np.array(curvature_data["directions"])
+
+        # length of arrays
+        array_len = len(curvature)
+        crop = int(array_len * 0.10)  # 10%
+
+        # ensure cropping doesn't eliminate the full array
+        if array_len <= 2 * crop:
+            continue  # skip malformed samples
+
+        # crop to middle 80%
+        curvature_cropped = curvature[crop:-crop]
+        other_curvature_cropped = other_curvature[crop:-crop]
+        directions_cropped = direction[crop:-crop]
+        other_directions_cropped = other_direction[crop:-crop]
+
+        # calculate distances for each measurement (cropped)
+        distance_curvature = np.linalg.norm(curvature_cropped - other_curvature_cropped)
+        distance_direction = np.linalg.norm(directions_cropped - other_directions_cropped)
+
+        # calculate and save total distance
+        total_distance = distance_curvature + distance_direction
+        distances.append((oid, total_distance))
+
+    if not distances:
+        return None, None, "No comparable samples found."
+
+    # sort the list of distances and only get the top 5 distances
+    distances.sort(key=lambda x: x[1])
+    top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
+
+    # Save to DB
+    db_handler.collection.update_one(
+        {"sample_id": sample_id},
+        {"$set": {"closest_matches": top_matches}}
+    )
+
+    # get the closest match to return it
+    closest_id = top_matches[0]["id"]
+    closest_dist = top_matches[0]["distance"]
+    msg = f"Closest sample to {sample_id} is {closest_id} (distance={closest_dist:.6f})"
+
+    return closest_id, closest_dist, msg
