@@ -280,14 +280,27 @@ def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, sm
 
 
 def find_enhanced_closest_curvature(sample_id, distance_dataset, distance_calculation, top_k=5):
+    """
+    calculate close samples and save to db. return the top result
+
+    :param sample_id:
+    :param distance_dataset:
+    :param distance_calculation:
+    :param top_k:
+    :return:
+    """
+
+    # convert sample_id to int
     try:
         sample_id = int(sample_id)
     except:
         return None, None, f"Invalid sample_id {sample_id}"
 
+    # create db handler
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
 
+    # get the sample from db and its curvature and direction (angle)
     doc = db_handler.collection.find_one({"sample_id": sample_id})
     if not doc or "curvature_data" not in doc:
         return None, None, f"No curvature data for sample_id {sample_id}"
@@ -317,81 +330,122 @@ def find_enhanced_closest_curvature(sample_id, distance_dataset, distance_calcul
 
 
 def calculate_distances(sample_id, curvature, direction, db_handler, distance_dataset,
-        distance_calculation, top_k=5):
+                        distance_calculation, top_k=5):
+    """
 
+    :param sample_id:
+    :param curvature:
+    :param direction:
+    :param db_handler:
+    :param distance_dataset:
+    :param distance_calculation:
+    :param top_k:
+    :return:
+    """
+
+    # setup distances list
     distances = []
 
     # iterate all other samples
-    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}}, {"sample_id": 1, "curvature_data": 1}):
+    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
+                                                {"sample_id": 1, "curvature_data": 1}):
         oid = other_doc["sample_id"]
         curv_data = other_doc.get("curvature_data")
         if not curv_data:
             continue
 
+        # get other samples data
         other_curv = np.array(curv_data["curvature"])
         other_dir = np.array(curv_data["directions"])
 
-        # ---------- dataset selection ----------
-        if distance_dataset == "cropped curvature and angle":
-            curvA, curvB, dirA, dirB = select_arrays(
-                curvature, other_curv, direction, other_dir, distance_dataset
-            )
+        # get distance list from select_arrays (already calculated)
+        dist = get_distance(
+            curvature, other_curv,
+            direction, other_dir,
+            distance_dataset,
+            distance_calculation
+        )
 
-            d1 = apply_metric(curvA, curvB, distance_calculation)
-            d2 = apply_metric(dirA, dirB, distance_calculation)
-            dist = d1 + d2
+        distances.append((oid, dist))
 
-        else:
-            arrA, arrB = select_arrays(
-                curvature, other_curv, direction, other_dir, distance_dataset
-            )
-            dist = apply_metric(arrA, arrB, distance_calculation)
-
-        distances.append((oid, float(dist)))
-
-    # ---------- no results ----------
+    # if no results
     if not distances:
         return []
 
-    # ---------- sort + top-k ----------
+    # sort + top-k results
     distances.sort(key=lambda x: x[1])
     top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
 
     return top_matches
 
 
-def select_arrays(curvature, other_curvature, direction, other_direction, distance_dataset):
-    L = len(curvature)
-    crop = int(L * 0.10)
+def get_distance(curvature, other_curvature, direction, other_direction, distance_dataset, distance_calculation):
+    """
 
+    :param curvature:
+    :param other_curvature:
+    :param direction:
+    :param other_direction:
+    :param distance_dataset:
+    :param distance_calculation:
+    :return:
+    """
+
+    # get amount of elements in the cropped 10%
+    curve_len = len(curvature)
+    crop = int(curve_len * 0.10)
+
+    if curve_len <= 2 * crop:
+        return None  # skip malformed samples
+
+    # cropping
+    curv_a_full = curvature
+    curv_b_full = other_curvature
+
+    curv_a_crop = curvature[crop:-crop]
+    curv_b_crop = other_curvature[crop:-crop]
+
+    dir_a_full = direction
+    dir_b_full = other_direction
+
+    dir_a_crop = direction[crop:-crop]
+    dir_b_crop = other_direction[crop:-crop]
+
+    # dataset selection
     if distance_dataset == "only curvature":
-        return curvature, other_curvature
+        return float(sum([apply_metric(curv_a_full, curv_b_full, distance_calculation)]))
 
     elif distance_dataset == "cropped curvature":
-        return curvature[crop:-crop], other_curvature[crop:-crop]
+        return float(sum([apply_metric(curv_a_crop, curv_b_crop, distance_calculation)]))
 
     elif distance_dataset == "only angle":
-        return direction, other_direction
+        return float(sum([apply_metric(dir_a_full, dir_b_full, distance_calculation)]))
 
     elif distance_dataset == "cropped angle":
-        return direction[crop:-crop], other_direction[crop:-crop]
+        return float(sum([apply_metric(dir_a_crop, dir_b_crop, distance_calculation)]))
 
     elif distance_dataset == "cropped curvature and angle":
-        # handled separately because it's 2 distances
-        return (
-            curvature[crop:-crop], other_curvature[crop:-crop],
-            direction[crop:-crop], other_direction[crop:-crop]
-        )
+        return float(sum([
+            apply_metric(curv_a_crop, curv_b_crop, distance_calculation),
+            apply_metric(dir_a_crop, dir_b_crop, distance_calculation)
+        ]))
 
-    else:
-        # fallback = full curvature + full direction
-        return (
-            curvature, other_curvature,
-            direction, other_direction
-        )
+    # default fallback: full curvature + full angle
+    return float(sum([
+        apply_metric(curv_a_full, curv_b_full, distance_calculation),
+        apply_metric(dir_a_full, dir_b_full, distance_calculation)
+    ]))
 
 
 def apply_metric(a, b, distance_calculation):
+    """
+
+    :param a:
+    :param b:
+    :param distance_calculation:
+    :return:
+    """
+
     if distance_calculation == "Euclidean Distance":
         return euclidean_distance(a, b)
 

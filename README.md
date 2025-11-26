@@ -43,6 +43,8 @@ This gets rid of everything in the .svg except the most complex blob, which is u
  
 Choose the dataset and calculation method that is used for the distance calculation from the dropdown 
 
+Cropped means that only the middle 80% of the svg path is used.
+
 Select smoothing method and other properties
 
 Do not fiddle with it while comparing samples, as different settings will make the program recalculate all sample data with the new settings
