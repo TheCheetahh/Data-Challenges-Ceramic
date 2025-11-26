@@ -338,7 +338,7 @@ def find_closest_curvature(sample_id, top_k=5):
     return closest_id, closest_dist, msg
 
 
-def find_enhanced_closest_curvature(sample_id, top_k=5):
+def find_enhanced_closest_curvature(sample_id, distance_method, top_k=5):
     """
     Finds the top-k closest samples by curvature and stores them in the DB.
 
@@ -386,13 +386,30 @@ def find_enhanced_closest_curvature(sample_id, top_k=5):
         directions_cropped = direction[crop:-crop]
         other_directions_cropped = other_direction[crop:-crop]
 
-        # calculate distances for each measurement (cropped)
-        distance_curvature = np.linalg.norm(curvature_cropped - other_curvature_cropped)
-        distance_direction = np.linalg.norm(directions_cropped - other_directions_cropped)
+        # distance selection
+        if distance_method == "only curvature":
+            distance_curvature_full = np.linalg.norm(curvature - other_curvature)
+            total_distance = distance_curvature_full
+        elif distance_method == "cropped curvature":
+            distance_curvature_cropped = np.linalg.norm(curvature_cropped - other_curvature_cropped)
+            total_distance = distance_curvature_cropped
+        elif distance_method == "only angle":
+            distance_direction_full = np.linalg.norm(direction - other_direction)
+            total_distance = distance_direction_full
+        elif distance_method == "cropped angle":
+            distance_direction_cropped = np.linalg.norm(directions_cropped - other_directions_cropped)
+            total_distance = distance_direction_cropped
+        elif distance_method == "cropped curvature and angle":
+            distance_curvature_cropped = np.linalg.norm(curvature_cropped - other_curvature_cropped)
+            distance_direction_cropped = np.linalg.norm(directions_cropped - other_directions_cropped)
+            total_distance = distance_curvature_cropped + distance_direction_cropped
+        else:
+            distance_curvature_full = np.linalg.norm(curvature - other_curvature)
+            distance_direction_full = np.linalg.norm(direction - other_direction)
+            total_distance = distance_curvature_full + distance_direction_full
 
-        # calculate and save total distance
-        total_distance = distance_curvature + distance_direction
-        distances.append((oid, total_distance))
+        # save distance
+        distances.append((oid, float(total_distance)))
 
     if not distances:
         return None, None, "No comparable samples found."

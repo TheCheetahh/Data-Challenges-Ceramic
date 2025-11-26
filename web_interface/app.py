@@ -46,7 +46,9 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
 
             # settings for analysis
             with gr.Row():
-                distance_method = gr.Dropdown(choices=["only curvature", "cropped curvature and angle"], label="Distanzberechnung")
+                distance_method = gr.Dropdown(choices=["only curvature", "cropped curvature",
+                                                       "only angle", "cropped angle", "cropped curvature and angle"],
+                                              label="Distanzberechnung")
                 smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
                                                      label="Glättungsmethode")
                 smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Glättungsfaktor")

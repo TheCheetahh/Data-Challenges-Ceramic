@@ -52,10 +52,7 @@ def click_analyze_svg(distance_method, sample_id, smooth_method, smooth_factor, 
     )
 
     # Find close match
-    if distance_method == "only curvature":
-        closest_id, distance, closest_msg = find_closest_curvature(sample_id)
-    else:
-        closest_id, distance, closest_msg = find_enhanced_closest_curvature(sample_id)
+    closest_id, distance, closest_msg = find_enhanced_closest_curvature(sample_id, distance_method)
     if closest_id is not None:
         # Load its SVG
         closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)
