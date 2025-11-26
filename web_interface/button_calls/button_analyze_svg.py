@@ -1,14 +1,15 @@
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display
-from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_samples, find_closest_curvature, find_enhanced_closest_curvature
+from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_samples, find_enhanced_closest_curvature
 
 
-def click_analyze_svg(distance_method, sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
+def click_analyze_svg(distance_dataset, distance_calculation, sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
     """
     called by button
     calculates the graph data, stores it in db and displays it
 
-    :param distance_method:
+    :param distance_calculation:
+    :param distance_dataset:
     :param sample_id:
     :param smooth_method:
     :param smooth_factor:
@@ -52,7 +53,7 @@ def click_analyze_svg(distance_method, sample_id, smooth_method, smooth_factor, 
     )
 
     # Find close match
-    closest_id, distance, closest_msg = find_enhanced_closest_curvature(sample_id, distance_method)
+    closest_id, distance, closest_msg = find_enhanced_closest_curvature(sample_id, distance_dataset, distance_calculation)
     if closest_id is not None:
         # Load its SVG
         closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)

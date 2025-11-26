@@ -40,6 +40,8 @@ This gets rid of everything in the .svg except the most complex blob, which is u
 ## Analyse files
 
 > Set settings for the analysis
+ 
+Choose the dataset and calculation method that is used for the distance calculation from the dropdown 
 
 Select smoothing method and other properties
 

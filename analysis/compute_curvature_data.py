@@ -8,6 +8,8 @@ from svgpathtools import svg2paths
 
 from analysis.analyze_curvature import normalize_path, curvature_from_points
 from database_handler import MongoDBHandler
+from analysis.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
+    dtw_distance, integral_difference
 
 
 def compute_curvature_for_all_samples(smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
@@ -277,156 +279,133 @@ def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, sm
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
-def find_closest_curvature(sample_id, top_k=5):
-    """
-    Finds the top-k closest samples by curvature and stores them in the DB.
-
-    Returns the first closest sample id and distance, and message.
-    """
-
-    # convert sample id to int
+def find_enhanced_closest_curvature(sample_id, distance_dataset, distance_calculation, top_k=5):
     try:
         sample_id = int(sample_id)
     except:
         return None, None, f"Invalid sample_id {sample_id}"
 
-    # create db_handler
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
 
-    # get doc and curve data
     doc = db_handler.collection.find_one({"sample_id": sample_id})
     if not doc or "curvature_data" not in doc:
         return None, None, f"No curvature data for sample_id {sample_id}"
-    target_curve = np.array(doc["curvature_data"]["curvature"])
 
-    # calculate the distance to all other samples. Save in distances list
-    distances = []
-    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}}, {"sample_id": 1, "curvature_data": 1}):
-        oid = other_doc["sample_id"]
-        curvature_data = other_doc.get("curvature_data")
-        if not curvature_data:
-            continue
-        other_curve = np.array(curvature_data["curvature"])
-        if len(other_curve) != len(target_curve):
-            other_curve = np.interp(
-                np.linspace(0, 1, len(target_curve)),
-                np.linspace(0, 1, len(other_curve)),
-                other_curve
-            )
-        dist = np.linalg.norm(target_curve - other_curve)
-        distances.append((oid, dist))
-
-    if not distances:
-        return None, None, "No comparable samples found."
-
-    # sort the list of distances and only get the top 5 distances
-    distances.sort(key=lambda x: x[1])
-    top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
-
-    # Save to DB
-    db_handler.collection.update_one(
-        {"sample_id": sample_id},
-        {"$set": {"closest_matches": top_matches}}
-    )
-
-    # get the closest match to return it
-    closest_id = top_matches[0]["id"]
-    closest_dist = top_matches[0]["distance"]
-    msg = f"Closest sample to {sample_id} is {closest_id} (distance={closest_dist:.6f})"
-
-    return closest_id, closest_dist, msg
-
-
-def find_enhanced_closest_curvature(sample_id, distance_method, top_k=5):
-    """
-    Finds the top-k closest samples by curvature and stores them in the DB.
-
-    Returns the first closest sample id and distance, and message.
-    """
-
-    # convert sample id to int
-    try:
-        sample_id = int(sample_id)
-    except:
-        return None, None, f"Invalid sample_id {sample_id}"
-
-    # create db_handler
-    db_handler = MongoDBHandler("svg_data")
-    db_handler.use_collection("svg_raw")
-
-    # get doc and curve data
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
-    if not doc or "curvature_data" not in doc:
-        return None, None, f"No curvature data for sample_id {sample_id}"
     curvature = np.array(doc["curvature_data"]["curvature"])
     direction = np.array(doc["curvature_data"]["directions"])
 
-    # calculate the distance to all other samples. Save in distances list
-    distances = []
-    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}}, {"sample_id": 1, "curvature_data": 1}):
-        oid = other_doc["sample_id"]
-        curvature_data = other_doc.get("curvature_data")
-        if not curvature_data:
-            continue
-        other_curvature = np.array(curvature_data["curvature"])
-        other_direction = np.array(curvature_data["directions"])
+    # compute distances
+    top_matches = calculate_distances(
+        sample_id, curvature, direction, db_handler,
+        distance_dataset, distance_calculation, top_k
+    )
 
-        # length of arrays
-        array_len = len(curvature)
-        crop = int(array_len * 0.10)  # 10%
-
-        # ensure cropping doesn't eliminate the full array
-        if array_len <= 2 * crop:
-            continue  # skip malformed samples
-
-        # crop to middle 80%
-        curvature_cropped = curvature[crop:-crop]
-        other_curvature_cropped = other_curvature[crop:-crop]
-        directions_cropped = direction[crop:-crop]
-        other_directions_cropped = other_direction[crop:-crop]
-
-        # distance selection
-        if distance_method == "only curvature":
-            distance_curvature_full = np.linalg.norm(curvature - other_curvature)
-            total_distance = distance_curvature_full
-        elif distance_method == "cropped curvature":
-            distance_curvature_cropped = np.linalg.norm(curvature_cropped - other_curvature_cropped)
-            total_distance = distance_curvature_cropped
-        elif distance_method == "only angle":
-            distance_direction_full = np.linalg.norm(direction - other_direction)
-            total_distance = distance_direction_full
-        elif distance_method == "cropped angle":
-            distance_direction_cropped = np.linalg.norm(directions_cropped - other_directions_cropped)
-            total_distance = distance_direction_cropped
-        elif distance_method == "cropped curvature and angle":
-            distance_curvature_cropped = np.linalg.norm(curvature_cropped - other_curvature_cropped)
-            distance_direction_cropped = np.linalg.norm(directions_cropped - other_directions_cropped)
-            total_distance = distance_curvature_cropped + distance_direction_cropped
-        else:
-            distance_curvature_full = np.linalg.norm(curvature - other_curvature)
-            distance_direction_full = np.linalg.norm(direction - other_direction)
-            total_distance = distance_curvature_full + distance_direction_full
-
-        # save distance
-        distances.append((oid, float(total_distance)))
-
-    if not distances:
+    if not top_matches:
         return None, None, "No comparable samples found."
 
-    # sort the list of distances and only get the top 5 distances
-    distances.sort(key=lambda x: x[1])
-    top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
-
-    # Save to DB
+    # save results
     db_handler.collection.update_one(
         {"sample_id": sample_id},
         {"$set": {"closest_matches": top_matches}}
     )
 
-    # get the closest match to return it
-    closest_id = top_matches[0]["id"]
-    closest_dist = top_matches[0]["distance"]
-    msg = f"Closest sample to {sample_id} is {closest_id} (distance={closest_dist:.6f})"
+    closest = top_matches[0]
+    msg = f"Closest sample to {sample_id} is {closest['id']} (distance={closest['distance']:.6f})"
 
-    return closest_id, closest_dist, msg
+    return closest["id"], closest["distance"], msg
+
+
+def calculate_distances(sample_id, curvature, direction, db_handler, distance_dataset,
+        distance_calculation, top_k=5):
+
+    distances = []
+
+    # iterate all other samples
+    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}}, {"sample_id": 1, "curvature_data": 1}):
+        oid = other_doc["sample_id"]
+        curv_data = other_doc.get("curvature_data")
+        if not curv_data:
+            continue
+
+        other_curv = np.array(curv_data["curvature"])
+        other_dir = np.array(curv_data["directions"])
+
+        # ---------- dataset selection ----------
+        if distance_dataset == "cropped curvature and angle":
+            curvA, curvB, dirA, dirB = select_arrays(
+                curvature, other_curv, direction, other_dir, distance_dataset
+            )
+
+            d1 = apply_metric(curvA, curvB, distance_calculation)
+            d2 = apply_metric(dirA, dirB, distance_calculation)
+            dist = d1 + d2
+
+        else:
+            arrA, arrB = select_arrays(
+                curvature, other_curv, direction, other_dir, distance_dataset
+            )
+            dist = apply_metric(arrA, arrB, distance_calculation)
+
+        distances.append((oid, float(dist)))
+
+    # ---------- no results ----------
+    if not distances:
+        return []
+
+    # ---------- sort + top-k ----------
+    distances.sort(key=lambda x: x[1])
+    top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
+
+    return top_matches
+
+
+def select_arrays(curvature, other_curvature, direction, other_direction, distance_dataset):
+    L = len(curvature)
+    crop = int(L * 0.10)
+
+    if distance_dataset == "only curvature":
+        return curvature, other_curvature
+
+    elif distance_dataset == "cropped curvature":
+        return curvature[crop:-crop], other_curvature[crop:-crop]
+
+    elif distance_dataset == "only angle":
+        return direction, other_direction
+
+    elif distance_dataset == "cropped angle":
+        return direction[crop:-crop], other_direction[crop:-crop]
+
+    elif distance_dataset == "cropped curvature and angle":
+        # handled separately because it's 2 distances
+        return (
+            curvature[crop:-crop], other_curvature[crop:-crop],
+            direction[crop:-crop], other_direction[crop:-crop]
+        )
+
+    else:
+        # fallback = full curvature + full direction
+        return (
+            curvature, other_curvature,
+            direction, other_direction
+        )
+
+
+def apply_metric(a, b, distance_calculation):
+    if distance_calculation == "Euclidean Distance":
+        return euclidean_distance(a, b)
+
+    elif distance_calculation == "Cosine Similarity":
+        return cosine_similarity_distance(a, b)
+
+    elif distance_calculation == "Correlation Distance":
+        return correlation_distance(a, b)
+
+    elif distance_calculation == "dynamic time warping":
+        return dtw_distance(a, b)
+
+    elif distance_calculation == "integral difference":
+        return integral_difference(a, b)
+
+    else:
+        raise ValueError(f"Unknown distance_calculation: {distance_calculation}")
