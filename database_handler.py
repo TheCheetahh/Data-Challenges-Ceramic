@@ -35,7 +35,7 @@ class MongoDBHandler:
         return self.collection.insert_one(document)
 
 
-    def insert_svg_files(self, files):
+    def insert_svg_files(self, files, svg_file_type):
         """Insert multiple SVG files into the collection svg_raw."""
         messages = []  # return string list
 
@@ -45,8 +45,10 @@ class MongoDBHandler:
             return "\n".join(messages)
 
         # set collection
-        if self.collection is None:
+        if svg_file_type == "sample":
             self.use_collection("svg_raw")
+        else:
+            self.use_collection("svg_template_type")
 
         # duplicate entries will not be inserted but counted
         duplicate_counter = 0
@@ -92,8 +94,7 @@ class MongoDBHandler:
             return "⚠️ No CSV file provided."
 
         # set collection
-        if self.collection is None:
-            self.use_collection("svg_raw")
+        self.use_collection("svg_raw")
 
         # Read file as bytes. This gets encoding of the csv
         rawdata = open(csv_file.name, "rb").read()

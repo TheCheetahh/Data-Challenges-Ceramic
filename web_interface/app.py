@@ -33,6 +33,10 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
                 csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"])
                 csv_upload_button = gr.Button("Upload .csv file")
 
+            with gr.Row():
+                theory_template_input = gr.File(label="SVG-Datei einer Theorie Vorlage hochladen", file_types=[".svg"], file_count="multiple")
+                theory_template_upload_button = gr.Button("Upload .svg file of a theory template")
+
             # generate clean svg from raw svg in database
             clean_svg_button = gr.Button("🚀 Clean SVG")
 
@@ -108,10 +112,13 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
                     closest_angle_plot_output = gr.Image(label="Angle Plot")
 
     # Button logic:
+    state_svg_type_sample = gr.State("sample")
+    state_svg_type_template = gr.State("template")
+
     # svg upload
     button_svg_upload.click(
         fn=click_svg_upload,
-        inputs=[svg_input],
+        inputs=[svg_input, state_svg_type_sample],
         outputs=[status_output_text, svg_dropdown]
     )
 
@@ -119,6 +126,12 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
     csv_upload_button.click(
         fn=db_handler.action_add_csv_data,
         inputs=[csv_input],
+        outputs=[status_output_text]
+    )
+
+    theory_template_upload_button.click(
+        fn=click_svg_upload,
+        inputs=[theory_template_input, state_svg_type_template],
         outputs=[status_output_text]
     )
 
