@@ -398,42 +398,29 @@ def get_distance(curvature, other_curvature, direction, other_direction, distanc
     if curve_len <= 2 * crop:
         return None  # skip malformed samples
 
-    # cropping
-    curv_a_full = curvature
-    curv_b_full = other_curvature
-
-    curv_a_crop = curvature[crop:-crop]
-    curv_b_crop = other_curvature[crop:-crop]
-
-    dir_a_full = direction
-    dir_b_full = other_direction
-
-    dir_a_crop = direction[crop:-crop]
-    dir_b_crop = other_direction[crop:-crop]
-
     # dataset selection
     if distance_dataset == "only curvature":
-        return float(sum([apply_metric(curv_a_full, curv_b_full, distance_calculation)]))
+        return float(sum([apply_metric(curvature, other_curvature, distance_calculation)]))
 
     elif distance_dataset == "cropped curvature":
-        return float(sum([apply_metric(curv_a_crop, curv_b_crop, distance_calculation)]))
+        return float(sum([apply_metric(curvature[crop:-crop], other_curvature[crop:-crop], distance_calculation)]))
 
     elif distance_dataset == "only angle":
-        return float(sum([apply_metric(dir_a_full, dir_b_full, distance_calculation)]))
+        return float(sum([apply_metric(direction, other_direction, distance_calculation)]))
 
     elif distance_dataset == "cropped angle":
-        return float(sum([apply_metric(dir_a_crop, dir_b_crop, distance_calculation)]))
+        return float(sum([apply_metric(direction[crop:-crop], other_direction[crop:-crop], distance_calculation)]))
 
     elif distance_dataset == "cropped curvature and angle":
         return float(sum([
-            apply_metric(curv_a_crop, curv_b_crop, distance_calculation),
-            apply_metric(dir_a_crop, dir_b_crop, distance_calculation)
+            apply_metric(curvature[crop:-crop], other_curvature[crop:-crop], distance_calculation),
+            apply_metric(direction[crop:-crop], other_direction[crop:-crop], distance_calculation)
         ]))
 
     # default fallback: full curvature + full angle
     return float(sum([
-        apply_metric(curv_a_full, curv_b_full, distance_calculation),
-        apply_metric(dir_a_full, dir_b_full, distance_calculation)
+        apply_metric(curvature, other_curvature, distance_calculation),
+        apply_metric(direction, other_direction, distance_calculation)
     ]))
 
 
