@@ -100,12 +100,16 @@ def get_most_complex_black_fill(raw_svg):
     return ET.tostring(new_svg, encoding="unicode")
 
 
-def clean_all_svgs(db_handler):
+def clean_all_svgs(db_handler, svg_file_type):
     """create a svg of only the black blob for all svgs in the database"""
 
     # set database and get all docs
-    collection = db_handler.db["svg_raw"]
-    docs = collection.find({})
+    # set collection
+    if svg_file_type == "sample":
+        collection = db_handler.use_collection("svg_raw")
+    else:
+        collection = db_handler.use_collection("svg_template_types")
+    docs = db_handler.collection.find({})
     counter = 0
 
     # get the raw content of the svg and check if it already has a cleaned svg

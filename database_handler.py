@@ -19,6 +19,7 @@ class MongoDBHandler:
     def use_collection(self, collection_name):
         """set or use collection."""
         self.collection = self.db[collection_name]
+        return self.collection
 
 
     def count(self, filter_query=None):
@@ -35,7 +36,7 @@ class MongoDBHandler:
         return self.collection.insert_one(document)
 
 
-    def insert_svg_files(self, files):
+    def insert_svg_files(self, files, svg_file_type):
         """Insert multiple SVG files into the collection svg_raw."""
         messages = []  # return string list
 
@@ -45,8 +46,10 @@ class MongoDBHandler:
             return "\n".join(messages)
 
         # set collection
-        if self.collection is None:
+        if svg_file_type == "sample":
             self.use_collection("svg_raw")
+        else:
+            self.use_collection("svg_template_types")
 
         # duplicate entries will not be inserted but counted
         duplicate_counter = 0
@@ -67,12 +70,15 @@ class MongoDBHandler:
                         duplicate_counter += 1
                         continue
 
+                # TODO get clean svg here to save it
+
                 # build doc and insert
                 doc = {
                     "sample_id": sample_id,
                     "filename": filename_only,
                     "raw_content": content,
-                    "uploaded_at": datetime.utcnow()
+                    "uploaded_at": datetime.utcnow(),
+                    "Typ" : ""
                 }
                 self.insert(doc)
                 messages.append(f"Uploaded '{svg_file.name}' successfully.")
@@ -92,8 +98,7 @@ class MongoDBHandler:
             return "⚠️ No CSV file provided."
 
         # set collection
-        if self.collection is None:
-            self.use_collection("svg_raw")
+        self.use_collection("svg_raw")
 
         # Read file as bytes. This gets encoding of the csv
         rawdata = open(csv_file.name, "rb").read()
@@ -161,7 +166,6 @@ class MongoDBHandler:
 
     def get_cleaned_svg(self, sample_id):
         """gets a cleaned SVG from the database."""
-        self.use_collection("svg_raw")
 
         try:
             sample_id = int(sample_id)
@@ -186,10 +190,10 @@ class MongoDBHandler:
         sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]
         return sorted(sample_ids)
 
-
-    def store_curvature_in_db(self, sample_id, arc_lengths, curvature, smooth_method, smooth_factor, smooth_window,
+    """
+        def store_curvature_in_db(self, sample_id, arc_lengths, curvature, smooth_method, smooth_factor, smooth_window,
                               n_samples):
-        """store the 1D curvature values"""
+        # store the 1D curvature values
         self.use_collection("svg_raw")
         self.collection.update_one(
             {"sample_id": int(sample_id)},
@@ -207,13 +211,13 @@ class MongoDBHandler:
             }},
             upsert=False
         )
+    """
+
 
     def get_sample_type(self, sample_id):
         """get sample type from database"""
-        db = MongoDBHandler("svg_data")
-        db.use_collection("svg_raw")
 
-        doc = db.collection.find_one({"sample_id": int(sample_id)}, {"Typ": 1})
+        doc = self.collection.find_one({"sample_id": int(sample_id)}, {"Typ": 1})
         if not doc:
             return None
         return doc.get("Typ", None)
@@ -242,6 +246,7 @@ class MongoDBHandler:
         """
         Save [{'id': X, 'distance': Y}, ...] for sample_id.
         """
+        self.use_collection("svg_raw")
         self.collection.update_one(
             {"sample_id": sample_id},
             {"$set": {"closest_matches": matches}},
@@ -249,6 +254,7 @@ class MongoDBHandler:
         )
 
     def get_closest_matches(self, sample_id):
+        self.use_collection("svg_raw")
         doc = self.collection.find_one(
             {"sample_id": sample_id},
             {"closest_matches": 1}

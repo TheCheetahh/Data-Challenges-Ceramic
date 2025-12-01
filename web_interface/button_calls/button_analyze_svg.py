@@ -1,9 +1,10 @@
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display
-from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_samples, find_enhanced_closest_curvature
+from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_samples, \
+    find_enhanced_closest_curvature, compute_curvature_for_one_sample
 
 
-def click_analyze_svg(distance_dataset, distance_calculation, sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
+def click_analyze_svg(distance_type_dataset, distance_dataset, distance_calculation, sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
     """
     called by button
     calculates the graph data, stores it in db and displays it
@@ -45,15 +46,20 @@ def click_analyze_svg(distance_dataset, distance_calculation, sample_id, smooth_
     svg_html = format_svg_for_display(cleaned_svg)
 
     # Ensure all samples have curvature data, else compute and store it
-    compute_status = compute_curvature_for_all_samples(smooth_method, smooth_factor, smooth_window, n_samples)
+    if distance_type_dataset == "other samples":
+        compute_status = compute_curvature_for_all_samples(distance_type_dataset, smooth_method, smooth_factor, smooth_window, n_samples)
+    else:
+        compute_status = compute_curvature_for_one_sample("other samples", sample_id, smooth_method, smooth_factor, smooth_window, n_samples)
+        compute_status = compute_curvature_for_all_samples("theory types", smooth_method, smooth_factor,
+                                                          smooth_window, n_samples)
 
     # get all plots of current sample
-    curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(
+    curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots("other samples",
         sample_id, smooth_method, smooth_factor, smooth_window, n_samples
     )
 
     # Find close match
-    closest_id, distance, closest_msg = find_enhanced_closest_curvature(sample_id, distance_dataset, distance_calculation)
+    closest_id, distance, closest_msg = find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_dataset, distance_calculation)
     if closest_id is not None:
         # Load its SVG
         closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)
@@ -64,6 +70,7 @@ def click_analyze_svg(distance_dataset, distance_calculation, sample_id, smooth_
 
         # Load its curvature data
         closest_plot_img, closest_color_img, closest_angle_img, _ = generate_all_plots(
+            distance_type_dataset,
             closest_id,
             smooth_method=smooth_method,
             smooth_factor=smooth_factor,
@@ -79,12 +86,16 @@ def click_analyze_svg(distance_dataset, distance_calculation, sample_id, smooth_
         closest_id_text = "No closest match found"
 
     # Get the type of the sample from the database
+    db_handler.use_collection("svg_raw")
     sample_type = db_handler.get_sample_type(sample_id)
-    closest_type = db_handler.get_sample_type(closest_id)
-
     # Load the full list of closest matches from DB
     closest_matches_list = db_handler.get_closest_matches(sample_id)
 
+    if distance_type_dataset == "other samples":
+        db_handler.use_collection("svg_raw")
+    else:
+        db_handler.use_collection("svg_template_types")
+    closest_type = db_handler.get_sample_type(closest_id)
 
     # Reset navigation state
     current_index = 0  # first one shown is index 0
