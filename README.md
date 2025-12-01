@@ -15,13 +15,15 @@ Running the main will automatically setup the database and collections, but not 
 
 ## Manage Files
 
-> .SVG uploads
+### File Upload
 
-Upload multiple svgs at once. Press the Upload Button to confirm
+> sample .SVG uploads
+
+Upload multiple svgs of your samples at once. Press the Upload Button to confirm
 
 Upload the svg with their full names as they are (Eg. recons_10001.svg), the program reads the sample_id from the file name
 
-> .CSV uploads
+> .CSV uploads for additional sample information
 
 Open the excel file and save it as a .csv. Use ";" as separators (it is a german excel table)
 
@@ -31,17 +33,27 @@ The exact format of the csv should not matter, as the program detects it itself.
 
 Confirm the upload by pressing the Upload button
 
-> DO NOT FORGET TO PRESS CLEAN SVG
+> sample .SVG uploads
 
-Sorry for capslock. Not pressing should not cause any errors, but you cannot analyse until you press this for now.
+Upload multiple svgs of your theory tyoes at once. Press the Upload Button to confirm
 
-This gets rid of everything in the .svg except the most complex blob, which is used for analysis.
+Name them exactly after their type. The file name will be used as the type (not yet implemented fully, need to wait till we get real theory types)
+
+### File Download
+
+> CSV Download of sample data
+
+Download all data of the samples as a .csv (not implemented)
 
 ## Analyse files
 
 > Set settings for the analysis
+
+Currently, we do not yet have real theory types, but the program is already semi prepared to use them. 
+You can use the Distanzberechnung Datensatz option to switch between comparing samples to other samples
+or samples to samples in the theory types (currently other samples). 
  
-Choose the dataset and calculation method that is used for the distance calculation from the dropdown 
+Choose the datapoints and calculation method that is used for the distance calculation from the dropdown 
 
 Cropped means that only the middle 80% of the svg path is used.
 

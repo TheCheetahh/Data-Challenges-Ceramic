@@ -38,7 +38,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 "## 🌀 SVG-Krümmungsanalyse\nLade SVG-Dateien hoch und füge zusätzliche information mittels CSV-Datai hinzu.")
 
             # uploads
-            with gr.Accordion("File Download", open=True):
+            with gr.Accordion("File Upload", open=True):
                 with gr.Row():
                     # svg upload
                     with gr.Column():
@@ -89,7 +89,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                                                      label="Distanzberechnung Datensatz")
                 distance_value_dataset = gr.Dropdown(choices=["only curvature", "cropped curvature",
                                                        "only angle", "cropped angle", "cropped curvature and angle"],
-                                                     label="Distanzberechnung Datensatz")
+                                                     label="Distanzberechnung Datenpunkte")
                 distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
                                                         "Correlation Distance", "dynamic time warping", "integral difference"],
                                                label="Distanzberechnung Datensatz")

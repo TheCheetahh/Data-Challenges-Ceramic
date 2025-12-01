@@ -77,7 +77,8 @@ class MongoDBHandler:
                     "sample_id": sample_id,
                     "filename": filename_only,
                     "raw_content": content,
-                    "uploaded_at": datetime.utcnow()
+                    "uploaded_at": datetime.utcnow(),
+                    "Typ" : ""
                 }
                 self.insert(doc)
                 messages.append(f"Uploaded '{svg_file.name}' successfully.")
@@ -165,7 +166,6 @@ class MongoDBHandler:
 
     def get_cleaned_svg(self, sample_id):
         """gets a cleaned SVG from the database."""
-        self.use_collection("svg_raw")
 
         try:
             sample_id = int(sample_id)
@@ -190,10 +190,10 @@ class MongoDBHandler:
         sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]
         return sorted(sample_ids)
 
-
-    def store_curvature_in_db(self, sample_id, arc_lengths, curvature, smooth_method, smooth_factor, smooth_window,
+    """
+        def store_curvature_in_db(self, sample_id, arc_lengths, curvature, smooth_method, smooth_factor, smooth_window,
                               n_samples):
-        """store the 1D curvature values"""
+        # store the 1D curvature values
         self.use_collection("svg_raw")
         self.collection.update_one(
             {"sample_id": int(sample_id)},
@@ -211,11 +211,11 @@ class MongoDBHandler:
             }},
             upsert=False
         )
+    """
+
 
     def get_sample_type(self, sample_id):
         """get sample type from database"""
-
-        self.use_collection("svg_raw")
 
         doc = self.collection.find_one({"sample_id": int(sample_id)}, {"Typ": 1})
         if not doc:
