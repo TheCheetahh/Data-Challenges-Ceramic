@@ -108,7 +108,7 @@ def clean_all_svgs(db_handler, svg_file_type):
     if svg_file_type == "sample":
         collection = db_handler.use_collection("svg_raw")
     else:
-        collection = db_handler.use_collection("svg_template_type")
+        collection = db_handler.use_collection("svg_template_types")
     docs = db_handler.collection.find({})
     counter = 0
 

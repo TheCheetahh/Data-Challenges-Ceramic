@@ -85,9 +85,11 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
             # settings for analysis
             with gr.Row():
-                distance_dataset = gr.Dropdown(choices=["only curvature", "cropped curvature",
+                distance_type_dataset = gr.Dropdown(choices=["other samples", "theory types"], value="other samples",
+                                                     label="Distanzberechnung Datensatz")
+                distance_value_dataset = gr.Dropdown(choices=["only curvature", "cropped curvature",
                                                        "only angle", "cropped angle", "cropped curvature and angle"],
-                                               label="Distanzberechnung Datensatz")
+                                                     label="Distanzberechnung Datensatz")
                 distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
                                                         "Correlation Distance", "dynamic time warping", "integral difference"],
                                                label="Distanzberechnung Datensatz")
@@ -179,7 +181,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     analyze_button.click(
         fn=click_analyze_svg,
-        inputs=[distance_dataset, distance_calculation, svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
@@ -205,7 +207,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     next_sample_button.click(
         fn=click_next_closest_sample,
-        inputs=[current_sample_state, closest_list_state, current_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,
             closest_curvature_plot_output,
@@ -219,7 +221,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     previous_sample_button.click(
         fn=click_previous_closest_sample,
-        inputs=[current_sample_state, closest_list_state, current_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,  # svg_html
             closest_curvature_plot_output,  # plot_img

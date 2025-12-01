@@ -12,7 +12,7 @@ from analysis.distance_methods import euclidean_distance, cosine_similarity_dist
     dtw_distance, integral_difference
 
 
-def compute_curvature_for_all_samples(smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
+def compute_curvature_for_all_samples(distance_type_dataset, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
     """
     Compute curvature for ALL documents that have cleaned_svg (skip if already stored).
     For each document that does not have it call compute_and_store_curvature
@@ -26,7 +26,10 @@ def compute_curvature_for_all_samples(smooth_method="savgol", smooth_factor=0.02
 
     # create database handler
     db_handler = MongoDBHandler("svg_data")
-    db_handler.use_collection("svg_raw")
+    if distance_type_dataset == "other samples":
+        db_handler.use_collection("svg_raw")
+    else:
+        db_handler.use_collection("svg_template_types")
 
     # get all samples
     docs = db_handler.collection.find({}, {"sample_id": 1, "cleaned_svg": 1, "curvature_data": 1})
@@ -58,6 +61,7 @@ def compute_curvature_for_all_samples(smooth_method="savgol", smooth_factor=0.02
 
         # Compute and overwrite stored curvature data if necessary
         status = compute_curvature_for_one_sample(
+            distance_type_dataset,
             sample_id,
             smooth_method=smooth_method,
             smooth_factor=smooth_factor,
@@ -74,7 +78,7 @@ def compute_curvature_for_all_samples(smooth_method="savgol", smooth_factor=0.02
     return f"✅ Recomputed: {processed}, ⏭️ Skipped (same settings): {skipped}, ❌ Errors: {errors}"
 
 
-def compute_curvature_for_one_sample(sample_id, smooth_method="savgol",
+def compute_curvature_for_one_sample(distance_type_dataset, sample_id, smooth_method="savgol",
                                      smooth_factor=0.02, smooth_window=15, n_samples=2000):
     """
     computes and stores curvature data for a single sample.
@@ -95,7 +99,10 @@ def compute_curvature_for_one_sample(sample_id, smooth_method="savgol",
 
     # create db handler
     db_handler = MongoDBHandler("svg_data")
-    db_handler.use_collection("svg_raw")
+    if distance_type_dataset == "other samples":
+        db_handler.use_collection("svg_raw")
+    else:
+        db_handler.use_collection("svg_template_types")
 
     # get the doc of the sample_id
     doc = db_handler.collection.find_one({"sample_id": sample_id})
@@ -151,10 +158,11 @@ def compute_curvature_for_one_sample(sample_id, smooth_method="savgol",
     return f"✅ Curvature computation stored for sample_id {sample_id}"
 
 
-def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
+def generate_all_plots(distance_type_dataset, sample_id, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
     """
     Compute curvature if missing or settings changed, otherwise load from DB.
 
+    :param distance_type_dataset:
     :param sample_id:
     :param smooth_method:
     :param smooth_factor:
@@ -170,7 +178,10 @@ def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, sm
 
     # create db handler
     db_handler = MongoDBHandler("svg_data")
-    db_handler.use_collection("svg_raw")
+    if distance_type_dataset == "other samples":
+        db_handler.use_collection("svg_raw")
+    else:
+        db_handler.use_collection("svg_template_types")
 
     # get document of the sample id
     doc = db_handler.collection.find_one({"sample_id": sample_id})
@@ -191,6 +202,7 @@ def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, sm
     # compute the date with current settings
     if recompute:
         compute_curvature_for_one_sample(
+            distance_type_dataset,
             sample_id,
             smooth_method=smooth_method,
             smooth_factor=smooth_factor,
@@ -279,10 +291,11 @@ def generate_all_plots(sample_id, smooth_method="savgol", smooth_factor=0.02, sm
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
-def find_enhanced_closest_curvature(sample_id, distance_dataset, distance_calculation, top_k=5):
+def find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_dataset, distance_calculation, top_k=5):
     """
     calculate close samples and save to db. return the top result
 
+    :param distance_type_dataset:
     :param sample_id:
     :param distance_dataset:
     :param distance_calculation:
@@ -308,14 +321,20 @@ def find_enhanced_closest_curvature(sample_id, distance_dataset, distance_calcul
     curvature = np.array(doc["curvature_data"]["curvature"])
     direction = np.array(doc["curvature_data"]["directions"])
 
+    if distance_type_dataset == "other samples":
+        db_handler.use_collection("svg_raw")
+    else:
+        db_handler.use_collection("svg_template_types")
+
     # compute distances
-    top_matches = calculate_distances(
-        sample_id, curvature, direction, db_handler,
+    top_matches = calculate_distances(sample_id, curvature, direction, db_handler,
         distance_dataset, distance_calculation, top_k
     )
 
     if not top_matches:
         return None, None, "No comparable samples found."
+
+    db_handler.use_collection("svg_raw")
 
     # save results
     db_handler.collection.update_one(

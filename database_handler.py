@@ -49,7 +49,7 @@ class MongoDBHandler:
         if svg_file_type == "sample":
             self.use_collection("svg_raw")
         else:
-            self.use_collection("svg_template_type")
+            self.use_collection("svg_template_types")
 
         # duplicate entries will not be inserted but counted
         duplicate_counter = 0

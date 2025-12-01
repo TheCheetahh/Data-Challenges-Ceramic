@@ -3,7 +3,7 @@ from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display
 
 
-def click_previous_closest_sample(current_sample_id, closest_list_state, closest_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, n_samples):
+def click_previous_closest_sample(distance_type_dataset, current_sample_id, closest_list_state, closest_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, n_samples):
     """
     Show the next closest sample using Gradio state variables.
 
@@ -14,7 +14,10 @@ def click_previous_closest_sample(current_sample_id, closest_list_state, closest
 
     # get a database handler
     db_handler = MongoDBHandler("svg_data")
-    db_handler.use_collection("svg_raw")
+    if distance_type_dataset == "other samples":
+        db_handler.use_collection("svg_raw")
+    else:
+        db_handler.use_collection("svg_template_types")
 
     # If state is empty or invalid → fallback
     if not isinstance(closest_list_state, list) or len(closest_list_state) == 0:
@@ -57,7 +60,7 @@ def click_previous_closest_sample(current_sample_id, closest_list_state, closest
         label_text = f"Closest sample: {next_id}"
 
     # --- load SVG + curvature plots + type text ---
-    plot_img, color_img, angle_plot_img, _ = generate_all_plots(next_id, smooth_method_dropdown, smooth_factor, smooth_window_slider, n_samples)
+    plot_img, color_img, angle_plot_img, _ = generate_all_plots(distance_type_dataset, next_id, smooth_method_dropdown, smooth_factor, smooth_window_slider, n_samples)
 
     # Load cleaned SVG of that sample id
     cleaned_svg, error = db_handler.get_cleaned_svg(next_id)
