@@ -19,6 +19,7 @@ class MongoDBHandler:
     def use_collection(self, collection_name):
         """set or use collection."""
         self.collection = self.db[collection_name]
+        return self.collection
 
 
     def count(self, filter_query=None):
@@ -68,6 +69,8 @@ class MongoDBHandler:
                     if self.collection.find_one({"filename": filename_only}):
                         duplicate_counter += 1
                         continue
+
+                # TODO get clean svg here to save it
 
                 # build doc and insert
                 doc = {
@@ -211,10 +214,10 @@ class MongoDBHandler:
 
     def get_sample_type(self, sample_id):
         """get sample type from database"""
-        db = MongoDBHandler("svg_data")
-        db.use_collection("svg_raw")
 
-        doc = db.collection.find_one({"sample_id": int(sample_id)}, {"Typ": 1})
+        self.use_collection("svg_raw")
+
+        doc = self.collection.find_one({"sample_id": int(sample_id)}, {"Typ": 1})
         if not doc:
             return None
         return doc.get("Typ", None)
@@ -243,6 +246,7 @@ class MongoDBHandler:
         """
         Save [{'id': X, 'distance': Y}, ...] for sample_id.
         """
+        self.use_collection("svg_raw")
         self.collection.update_one(
             {"sample_id": sample_id},
             {"$set": {"closest_matches": matches}},
@@ -250,6 +254,7 @@ class MongoDBHandler:
         )
 
     def get_closest_matches(self, sample_id):
+        self.use_collection("svg_raw")
         doc = self.collection.find_one(
             {"sample_id": sample_id},
             {"closest_matches": 1}
