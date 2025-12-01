@@ -8,8 +8,22 @@ from web_interface.button_calls.button_save_sample_type import click_save_sample
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 
+css = """
+/* target by elem_id and common class names used by Gradio versions */
+#svg_upload .gr-file-list,
+#svg_upload .gr-file-preview,
+#svg_upload .file-list,
+#svg_upload .filePreview,
+#svg_upload .file-preview {
+    min-height: 200px !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+    display: block !important;
+}
+"""
+
 # main webpage code
-with gr.Blocks(title="Ceramics Analysis") as demo:
+with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     db_handler = MongoDBHandler("svg_data")
 
     # states work like a variable
@@ -23,26 +37,47 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
             gr.Markdown(
                 "## 🌀 SVG-Krümmungsanalyse\nLade SVG-Dateien hoch und füge zusätzliche information mittels CSV-Datai hinzu.")
 
-            # svg upload
-            with gr.Row():
-                svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"], file_count="multiple")
-                button_svg_upload = gr.Button("Upload .svg files")
+            # uploads
+            with gr.Accordion("File Download", open=True):
+                with gr.Row():
+                    # svg upload
+                    with gr.Column():
+                        with gr.Group():
+                            gr.Markdown("### SVG Uploads för sämples")
+                            svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"], file_count="multiple",  elem_id="svg_upload")
+                            button_svg_upload = gr.Button("Upload .svg files")
 
-            # csv upload
-            with gr.Row():
-                csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"])
-                csv_upload_button = gr.Button("Upload .csv file")
+                    # csv upload
+                    with gr.Column():
+                        with gr.Group():
+                            gr.Markdown("### CSV Uploads för sämples")
+                            csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"], elem_id="svg_upload")
+                            csv_upload_button = gr.Button("Upload .csv file")
 
-            with gr.Row():
-                theory_template_input = gr.File(label="SVG-Datei einer Theorie Vorlage hochladen", file_types=[".svg"], file_count="multiple")
-                theory_template_upload_button = gr.Button("Upload .svg file of a theory template")
+                    # svg upload for theory types
+                    with gr.Group():
+                        with gr.Column():
+                            gr.Markdown("### SVG Uploads för theörie tüps fröm le bööks")
+                            theory_template_input = gr.File(label="SVG-Datei einer Theorie Vorlage hochladen",
+                                                            file_types=[".svg"], file_count="multiple", elem_id="svg_upload")
+                            theory_template_upload_button = gr.Button("Upload .svg file of a theory template")
+
+            # downloads
+            with gr.Accordion("File Download", open=True):
+                with gr.Row():
+                    with gr.Column():
+                        with gr.Group():
+                            # csv download
+                            gr.Markdown("### CSV Download för sämples täble")
+                            csv_download_button = gr.Button("Download Project CSV")
+
 
             # generate clean svg from raw svg in database
-            clean_svg_button = gr.Button("🚀 Clean SVG")
+            # clean_svg_button = gr.Button("🚀 Clean SVG")
 
             # status box is output for the messages from the buttons of this tab
             with gr.Row():
-                status_output_text = gr.Textbox(label="Status", interactive=False)
+                status_output_text = gr.Textbox(label="Status", interactive=False, lines=8)
 
         # Tab for all analysis related tasks
         with gr.Tab("Analyse files"):
@@ -134,12 +169,13 @@ with gr.Blocks(title="Ceramics Analysis") as demo:
         inputs=[theory_template_input, state_svg_type_template],
         outputs=[status_output_text]
     )
-
+    """
     clean_svg_button.click(
         fn=click_clean_svg,
         inputs=[],
         outputs=[status_output_text]
     )
+    """
 
     analyze_button.click(
         fn=click_analyze_svg,
