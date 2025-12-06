@@ -25,7 +25,7 @@ def click_analyze_svg(distance_type_dataset, distance_dataset, distance_calculat
 
     # Convert sample_id to int
     try:
-        sample_id = int(sample_id)
+        sample_id = sample_id
     except (ValueError, TypeError):
         placeholder_html = "<p style='color:red;'>❌ Invalid or no sample selected.</p>"
         return (
@@ -62,6 +62,11 @@ def click_analyze_svg(distance_type_dataset, distance_dataset, distance_calculat
     closest_id, distance, closest_msg = find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_dataset, distance_calculation)
     if closest_id is not None:
         # Load its SVG
+        if distance_type_dataset == "other samples":
+            db_handler.use_collection("svg_raw")
+        else:
+            db_handler.use_collection("svg_template_types")
+
         closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)
         if closest_error:
             closest_svg_html = f"<p style='color:red;'>Error loading closest SVG: {closest_error}</p>"

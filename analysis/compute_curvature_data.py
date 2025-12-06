@@ -93,7 +93,7 @@ def compute_curvature_for_one_sample(distance_type_dataset, sample_id, smooth_me
 
     # convert sample_id to int
     try:
-        sample_id = int(sample_id)
+        sample_id = sample_id
     except ValueError:
         return f"❌ sample_id must be an integer."
 
@@ -172,7 +172,7 @@ def generate_all_plots(distance_type_dataset, sample_id, smooth_method="savgol",
     """
     # Convert sample_id to int
     try:
-        sample_id = int(sample_id)
+        sample_id = sample_id
     except ValueError:
         return None, None, "❌ sample_id must be an integer."
 
@@ -305,7 +305,7 @@ def find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_d
 
     # convert sample_id to int
     try:
-        sample_id = int(sample_id)
+        sample_id = sample_id
     except:
         return None, None, f"Invalid sample_id {sample_id}"
 
