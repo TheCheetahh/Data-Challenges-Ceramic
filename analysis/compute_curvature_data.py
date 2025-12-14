@@ -237,7 +237,6 @@ def generate_all_plots(distance_type_dataset, sample_id, smooth_method="savgol",
     points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
 
     # --- Generate 1D line plot ---
-    curvature = -curvature  # einfach nur, weil positive Zahlen hübscher sind
     buf1 = io.BytesIO()
     plt.figure(figsize=(10, 4))
     plt.axhline(0, color="gray", linestyle="--")
@@ -273,14 +272,14 @@ def generate_all_plots(distance_type_dataset, sample_id, smooth_method="savgol",
     curvature_color_img = Image.open(buf2)
 
     # --- Generate direction plot ---
-    directions = -directions  # einfach nur, weil positive Zahlen hübscher sind
     directions = np.unwrap(directions)
+    directions_deg = np.degrees(directions)
     buf3 = io.BytesIO()
     plt.figure(figsize=(10, 4))
-    plt.plot(arc_lengths, directions, color="blue")
+    plt.plot(arc_lengths, directions_deg, color="blue")
     plt.title(f"Direction along normalized arc length (sample {sample_id})")
     plt.xlabel("Normalised arc length")
-    plt.ylabel("Angle to x-Axis [rad]")
+    plt.ylabel("Angle to x-Axis [°]")
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(buf3, format="png")

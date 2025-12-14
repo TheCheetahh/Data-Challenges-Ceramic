@@ -48,9 +48,17 @@ def curvature_from_points(points):
     curvature = np.convolve(curvature, np.ones(5)/5, mode='same')
     return curvature
 
+def ensure_left_to_right(points):
+    x0, y0 = points[0]
+    x1, y1 = points[-1]
+    if (y0 - y1) <= (x0 - x1):  # Steigung 1: y-Differenz <= x-Differenz
+        return points[::-1]
+    else:
+        return points
 
 def normalize_path(points, smooth_method, smooth_factor, smooth_window):
     """Pfad auf Startpunkt (0,0) verschieben und optional ausrichten."""
+    points = ensure_left_to_right(points)
     points = points - points[0]
 
     '''
@@ -94,7 +102,9 @@ def normalize_path(points, smooth_method, smooth_factor, smooth_window):
 
 
 def sample_svg_path(svg_file, n_samples=1000):
-    """Liest den SVG-Pfad und tastet ihn gleichmäßig entlang der Länge ab (umgekehrte Richtung)."""
+    """Liest den SVG-Pfad und tastet ihn gleichmäßig entlang der Richtung ab,
+    in der die Punkte in der Datei gespeichert sind.
+    ensure_left_to_right benötigt, weil diese Reihenfolge random sein kann"""
     paths, _ = svg2paths(svg_file)
     path = paths[0]
     ts = np.linspace(1, 0, n_samples)  # Laufrichtung umgekehrt
