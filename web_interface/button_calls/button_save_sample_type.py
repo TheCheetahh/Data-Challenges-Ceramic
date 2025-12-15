@@ -7,7 +7,7 @@ def click_save_sample_type(sample_id, new_type):
 
     # Validate ID
     try:
-        sample_id = int(sample_id)
+        sample_id = sample_id
     except (ValueError, TypeError):
         return "❌ Invalid sample ID."
 

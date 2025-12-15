@@ -4,13 +4,13 @@ from analysis.compute_curvature_data import generate_all_plots, compute_curvatur
     find_enhanced_closest_curvature, compute_curvature_for_one_sample
 
 
-def click_analyze_svg(distance_type_dataset, distance_dataset, distance_calculation, sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
+def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method, smooth_factor, smooth_window, n_samples):
     """
     called by button
     calculates the graph data, stores it in db and displays it
 
     :param distance_calculation:
-    :param distance_dataset:
+    :param distance_value_dataset:
     :param sample_id:
     :param smooth_method:
     :param smooth_factor:
@@ -25,7 +25,7 @@ def click_analyze_svg(distance_type_dataset, distance_dataset, distance_calculat
 
     # Convert sample_id to int
     try:
-        sample_id = int(sample_id)
+        sample_id = sample_id
     except (ValueError, TypeError):
         placeholder_html = "<p style='color:red;'>❌ Invalid or no sample selected.</p>"
         return (
@@ -59,9 +59,14 @@ def click_analyze_svg(distance_type_dataset, distance_dataset, distance_calculat
     )
 
     # Find close match
-    closest_id, distance, closest_msg = find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_dataset, distance_calculation)
+    closest_id, distance, closest_msg = find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_value_dataset, distance_calculation)
     if closest_id is not None:
         # Load its SVG
+        if distance_type_dataset == "other samples":
+            db_handler.use_collection("svg_raw")
+        else:
+            db_handler.use_collection("svg_template_types")
+
         closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)
         if closest_error:
             closest_svg_html = f"<p style='color:red;'>Error loading closest SVG: {closest_error}</p>"

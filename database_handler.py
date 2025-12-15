@@ -35,60 +35,80 @@ class MongoDBHandler:
             raise ValueError("No collection selected.")
         return self.collection.insert_one(document)
 
-
     def insert_svg_files(self, files, svg_file_type):
-        """Insert multiple SVG files into the collection svg_raw."""
-        messages = []  # return string list
+        """Insert SVG files into svg_raw (samples) or svg_template_types (theory templates)."""
 
-        # if no files were uploaded
+        messages = []
+
         if not files:
-            messages.append("no files to upload")
-            return "\n".join(messages)
+            return "no files to upload"
 
-        # set collection
+        # choose collection
         if svg_file_type == "sample":
             self.use_collection("svg_raw")
         else:
             self.use_collection("svg_template_types")
 
-        # duplicate entries will not be inserted but counted
         duplicate_counter = 0
 
-        # upload each file
         for svg_file in files:
             try:
-                # open file
-                with open(svg_file.name, "r", encoding="utf-8") as f:
+                file_path = svg_file.name
+                filename_only = os.path.basename(file_path)
+
+                # read file content
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
-                    # Extract just the file name (without path) and the sample_id (svg have unnecessary recons in name)
-                    filename_only = os.path.basename(svg_file.name)
-                    sample_id = int(filename_only.split("_")[1].split(".")[0])
+                # strip the ".svg" once for template mode
+                name_no_ext = (
+                    os.path.splitext(filename_only)[0]
+                )  # removes .svg or any extension
 
-                    # Check if the file is already in the database
-                    if self.collection.find_one({"filename": filename_only}):
-                        duplicate_counter += 1
-                        continue
+                # ------------------------------------------------------------------
+                # SAMPLE MODE → extract numeric ID as before: recons_10003.svg
+                # ------------------------------------------------------------------
+                if svg_file_type == "sample":
+                    try:
+                        sample_id = filename_only.split("_")[1].split(".")[0]
+                    except Exception:
+                        raise ValueError(
+                            f"Invalid sample filename format (expected e.g. recons_10003.svg): {filename_only}"
+                        )
+                    Typ_value = ""  # samples do not have a type
 
-                # TODO get clean svg here to save it
+                # ------------------------------------------------------------------
+                # THEORY TEMPLATE MODE → sample_id = filename WITHOUT extension
+                # Typ = filename WITHOUT extension
+                # ------------------------------------------------------------------
+                else:
+                    sample_id = name_no_ext
+                    Typ_value = name_no_ext
 
-                # build doc and insert
+                # duplicate check
+                if self.collection.find_one({"filename": filename_only}):
+                    duplicate_counter += 1
+                    continue
+
+                # build document
                 doc = {
                     "sample_id": sample_id,
                     "filename": filename_only,
                     "raw_content": content,
                     "uploaded_at": datetime.utcnow(),
-                    "Typ" : ""
+                    "Typ": Typ_value
                 }
+
                 self.insert(doc)
-                messages.append(f"Uploaded '{svg_file.name}' successfully.")
+                messages.append(f"Uploaded '{filename_only}' successfully.")
 
             except Exception as e:
-                messages.append(f"Error '{svg_file.name}': {e}")
+                messages.append(f"Error '{filename_only}': {e}")
 
-        # return messages
-        messages.append(str(duplicate_counter) + " duplicate files were not added to collection")
+        # footer summary
+        messages.append(f"{duplicate_counter} duplicate files were not added to collection")
         messages.append(f"Total files in collection: {self.count()}")
+
         return "\n".join(messages)
 
 
@@ -168,7 +188,7 @@ class MongoDBHandler:
         """gets a cleaned SVG from the database."""
 
         try:
-            sample_id = int(sample_id)
+            sample_id = sample_id
         except ValueError:
             return None, "❌ sample_id must be a number."
 
@@ -190,34 +210,11 @@ class MongoDBHandler:
         sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]
         return sorted(sample_ids)
 
-    """
-        def store_curvature_in_db(self, sample_id, arc_lengths, curvature, smooth_method, smooth_factor, smooth_window,
-                              n_samples):
-        # store the 1D curvature values
-        self.use_collection("svg_raw")
-        self.collection.update_one(
-            {"sample_id": int(sample_id)},
-            {"$set": {
-                "curvature_data": {
-                    "arc_lengths": arc_lengths.tolist(),
-                    "curvature": curvature.tolist(),
-                    "smoothing_settings": {
-                        "smooth_method": smooth_method,
-                        "smooth_factor": smooth_factor,
-                        "smooth_window": smooth_window,
-                        "n_samples": n_samples
-                    }
-                }
-            }},
-            upsert=False
-        )
-    """
-
 
     def get_sample_type(self, sample_id):
         """get sample type from database"""
 
-        doc = self.collection.find_one({"sample_id": int(sample_id)}, {"Typ": 1})
+        doc = self.collection.find_one({"sample_id": sample_id}, {"Typ": 1})
         if not doc:
             return None
         return doc.get("Typ", None)
@@ -225,7 +222,7 @@ class MongoDBHandler:
     def update_type(self, sample_id, new_type):
         """Update the 'type' field of a document"""
         try:
-            sample_id = int(sample_id)
+            sample_id = sample_id
         except (ValueError, TypeError):
             return False, "❌ sample_id must be an integer."
 

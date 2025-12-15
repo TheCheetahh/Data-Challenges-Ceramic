@@ -33,9 +33,9 @@ The exact format of the csv should not matter, as the program detects it itself.
 
 Confirm the upload by pressing the Upload button
 
-> sample .SVG uploads
+> theory .SVG uploads
 
-Upload multiple svgs of your theory tyoes at once. Press the Upload Button to confirm
+Upload multiple svgs of your theory types at once. Press the Upload Button to confirm
 
 Name them exactly after their type. The file name will be used as the type (not yet implemented fully, need to wait till we get real theory types)
 
