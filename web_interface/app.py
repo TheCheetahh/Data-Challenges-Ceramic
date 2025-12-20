@@ -1,11 +1,10 @@
 import gradio as gr
 
 from database_handler import MongoDBHandler
-from web_interface.button_calls.button_clean_svg import click_clean_svg
+from web_interface.button_calls.button_analyze_svg import click_analyze_svg
 from web_interface.button_calls.button_next_closest_sample import click_next_closest_sample
 from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
-from web_interface.button_calls.button_analyze_svg import click_analyze_svg
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 
 css = """
@@ -44,7 +43,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     with gr.Column():
                         with gr.Group():
                             gr.Markdown("### SVG Uploads för sämples")
-                            svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"], file_count="multiple",  elem_id="svg_upload")
+                            svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"],
+                                                file_count="multiple", elem_id="svg_upload")
                             button_svg_upload = gr.Button("Upload .svg files")
 
                     # csv upload
@@ -59,7 +59,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         with gr.Column():
                             gr.Markdown("### SVG Uploads för theörie tüps fröm le bööks")
                             theory_template_input = gr.File(label="SVG-Datei einer Theorie Vorlage hochladen",
-                                                            file_types=[".svg"], file_count="multiple", elem_id="svg_upload")
+                                                            file_types=[".svg"], file_count="multiple",
+                                                            elem_id="svg_upload")
                             theory_template_upload_button = gr.Button("Upload .svg file of a theory template")
 
             # downloads
@@ -70,7 +71,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                             # csv download
                             gr.Markdown("### CSV Download för sämples täble")
                             csv_download_button = gr.Button("Download Project CSV")
-
 
             # generate clean svg from raw svg in database
             # clean_svg_button = gr.Button("🚀 Clean SVG")
@@ -86,13 +86,16 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             # settings for analysis
             with gr.Row():
                 distance_type_dataset = gr.Dropdown(choices=["other samples", "theory types"], value="other samples",
-                                                     label="Distanzberechnung Datensatz")
+                                                    label="Distanzberechnung Datensatz")
                 distance_value_dataset = gr.Dropdown(choices=["only curvature", "cropped curvature",
-                                                       "only angle", "cropped angle", "cropped curvature and angle", "lip_aligned_curvature", "lip_aligned_angle"],
+                                                              "only angle", "cropped angle",
+                                                              "cropped curvature and angle", "lip_aligned_curvature",
+                                                              "lip_aligned_angle"],
                                                      label="Distanzberechnung Datenpunkte")
                 distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
-                                                        "Correlation Distance", "dynamic time warping", "integral difference"],
-                                               label="Distanzberechnung Datensatz")
+                                                            "Correlation Distance", "dynamic time warping",
+                                                            "integral difference"],
+                                                   label="Distanzberechnung Datensatz")
                 smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
                                                      label="Glättungsmethode")
                 smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Glättungsfaktor")
@@ -181,7 +184,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     analyze_button.click(
         fn=click_analyze_svg,
-        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
@@ -207,7 +211,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     next_sample_button.click(
         fn=click_next_closest_sample,
-        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,
             closest_curvature_plot_output,
@@ -221,7 +226,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     previous_sample_button.click(
         fn=click_previous_closest_sample,
-        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state, smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,  # svg_html
             closest_curvature_plot_output,  # plot_img
