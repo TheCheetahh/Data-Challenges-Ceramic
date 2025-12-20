@@ -478,90 +478,51 @@ def get_distance(oid, sample_id, curvature, other_curvature, direction, other_di
     Compute distance between shard and template using different methods.
     """
 
-
     # get amount of elements in the cropped 10%
     curve_len = len(curvature)
     crop = int(curve_len * 0.10)
-
     if curve_len <= 2 * crop:
-        return None  # skip malformed samples
+        return None
 
     # dataset selection
     if distance_dataset == "only curvature":
 
-
         return float(sum([apply_metric(curvature, other_curvature, distance_calculation)]))
-
-
-
-
-
-
-
 
     elif distance_dataset == "lip_aligned_angle":
 
+        # validate arrays
         if direction is None:
             return None
-
         n_shard = len(direction)
-
         if n_shard < 20:
             return None
 
-        # ----------------------------
-
         # Convert sample directions to degrees in [-180, 180]
-
-        # ----------------------------
-
         direction_deg = np.degrees(direction)
-
         direction_deg = ((direction_deg + 180) % 360) - 180
 
-        # Find candidate zero-crossings for the shard
-
+        # Find candidates zero-crossings for the shard
         shard_candidates = find_all_lip_index_by_angle(direction)
-
         if len(shard_candidates) == 0:
             return None
 
-        # ----------------------------
-
         # Load template SVG from DB
-
-        # ----------------------------
-
         db_handler = MongoDBHandler("svg_data")
-
         db_handler.use_collection("svg_template_types")
-
         template_doc = db_handler.collection.find_one({"sample_id": oid})
-
         if template_doc is None or "raw_content" not in template_doc:
             return None
-
-        svg_file_like = io.StringIO(template_doc["raw_content"])
-
-        paths, _ = svg2paths(svg_file_like)
-
+        raw_template_svg = io.StringIO(template_doc["raw_content"])
+        paths, _ = svg2paths(raw_template_svg)
         if len(paths) == 0:
             return None
-
         path_template = paths[0]
 
-        # ----------------------------
-
         # Iterative resampling
-
-        # ----------------------------
-
         min_distance = np.inf
-
         best_dir_aligned_crop = None
-
         best_shard_candidate = None
-
         best_template_candidate = None
 
         n_resample = 2000
