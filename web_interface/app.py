@@ -211,7 +211,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     next_sample_button.click(
         fn=click_next_closest_sample,
-        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,
@@ -226,7 +226,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     previous_sample_button.click(
         fn=click_previous_closest_sample,
-        inputs=[distance_type_dataset, current_sample_state, closest_list_state, current_index_state,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,  # svg_html

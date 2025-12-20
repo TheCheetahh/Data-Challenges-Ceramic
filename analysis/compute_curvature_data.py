@@ -46,8 +46,8 @@ def compute_curvature_for_all_items(analysis_config):
 
     # iterate over all items
     for doc in docs:
-        sample_id = doc.get("sample_id")
-        if not sample_id:
+        current_sanple_id = doc.get("sample_id")
+        if not current_sanple_id:
             continue
 
         # load curvature data and smoothing settings of the doc
@@ -65,7 +65,7 @@ def compute_curvature_for_all_items(analysis_config):
             continue
 
         # Compute and overwrite stored curvature data if necessary
-        status = compute_curvature_for_one_item(analysis_config)
+        status = compute_curvature_for_one_item(analysis_config, current_sanple_id)
 
         if status.startswith("❌"):
             errors += 1
@@ -76,7 +76,7 @@ def compute_curvature_for_all_items(analysis_config):
     return f"✅ Recomputed: {processed}, ⏭️ Skipped (same settings): {skipped}, ❌ Errors: {errors}"
 
 
-def compute_curvature_for_one_item(analysis_config):
+def compute_curvature_for_one_item(analysis_config, current_sanple_id):
     """
     Computes and stores curvature, direction, arc-length,
     and lip anchor indices for a single sample.
@@ -87,7 +87,6 @@ def compute_curvature_for_one_item(analysis_config):
 
     # set vars from analysis_config
     db_handler = analysis_config.get("db_handler")
-    sample_id = analysis_config.get("sample_id")
     distance_type_dataset = analysis_config.get("distance_type_dataset")
     smooth_method = analysis_config.get("smooth_method")
     smooth_factor = analysis_config.get("smooth_factor")
@@ -101,11 +100,11 @@ def compute_curvature_for_one_item(analysis_config):
         db_handler.use_collection("svg_template_types")
 
     # get the doc of the sample_id
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    doc = db_handler.collection.find_one({"sample_id": current_sanple_id})
     if doc is None:
-        return f"❌ No sample found with sample_id: {sample_id}"
+        return f"❌ No sample found with sample_id: {current_sanple_id}"
     if "cleaned_svg" not in doc:
-        return f"❌ Field 'cleaned_svg' not found in document for sample_id: {sample_id}"
+        return f"❌ Field 'cleaned_svg' not found in document for sample_id: {current_sanple_id}"
 
     # --- Parse SVG path ---
     if distance_type_dataset == "other samples":
@@ -158,7 +157,7 @@ def compute_curvature_for_one_item(analysis_config):
 
     # --- Store in DB ---
     db_handler.collection.update_one(
-        {"sample_id": sample_id},
+        {"sample_id": current_sanple_id},
         {"$set": {
             "curvature_data": {
                 "arc_lengths": arc_lengths.tolist(),
@@ -186,7 +185,7 @@ def compute_curvature_for_one_item(analysis_config):
         }}
     )
 
-    return f"✅ Curvature + lip anchors stored for sample_id {sample_id}"
+    return f"✅ Curvature + lip anchors stored for sample_id {current_sanple_id}"
 
 
 def generate_all_plots(analysis_config):

@@ -56,7 +56,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
     else:
         analysis_config["distance_type_dataset"] = "other samples"
-        compute_status = compute_curvature_for_one_item(analysis_config)
+        compute_status = compute_curvature_for_one_item(analysis_config, sample_id)
 
         # get all plots of current sample
         curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
