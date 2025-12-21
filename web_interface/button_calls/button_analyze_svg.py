@@ -57,7 +57,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
     else:
         analysis_config["distance_type_dataset"] = "other samples"
-        compute_status = compute_curvature_for_one_item(analysis_config, sample_id)
+        doc = db_handler.collection.find_one({"sample_id": sample_id})
+        if not doc or not doc.get("closest_matches_valid", False):
+            compute_status = compute_curvature_for_one_item(analysis_config, sample_id)
         doc = db_handler.collection.find_one({"sample_id": sample_id})
 
         # get all plots of current sample
@@ -65,9 +67,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         analysis_config["distance_type_dataset"] = "theory types"
         compute_status = compute_curvature_for_all_items(analysis_config)
 
-    # TODO skip if already there
     # Find close match
     if not doc or not doc.get("closest_matches_valid", False):
+        print(doc.get("closest_matches_valid", False))
         closest_id, distance, closest_msg = find_enhanced_closest_curvature(analysis_config)
     else:
         closest_id = doc["closest_matches"][0]["id"]
