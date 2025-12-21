@@ -65,7 +65,7 @@ def compute_curvature_for_all_items(analysis_config):
             continue
 
         # Compute and overwrite stored curvature data if necessary
-        print("Debug: compute_curvature_for_one_item")
+        # print("Debug: compute_curvature_for_one_item")
         status = compute_curvature_for_one_item(analysis_config, current_sanple_id)
 
         if status.startswith("❌"):
@@ -485,6 +485,7 @@ def get_distance(analysis_config, oid, curvature, other_curv,
         # Find candidates zero-crossings for the shard
         shard_candidates = find_all_lip_index_by_angle(direction)
         if len(shard_candidates) == 0:
+            print("No shard candidates found")
             return None
 
         # Load template SVG from DB
@@ -541,7 +542,8 @@ def get_distance(analysis_config, oid, curvature, other_curv,
             return None
 
         if best_dir_aligned_crop is not None:
-            print("Debug: theory calc")
+            # print("Debug: theory calc")
+            pass
         return float(min_distance)
 
     elif distance_value_dataset == "lip_aligned_curvature":
@@ -558,7 +560,7 @@ def get_distance(analysis_config, oid, curvature, other_curv,
             apply_metric(direction[crop:-crop], other_dir[crop:-crop], distance_calculation)
         ]))
 
-    print("Calculating distance...")
+    print("Calculating fallback: full curvature + full angle...")
 
     # default fallback: full curvature + full angle
     return float(sum([
@@ -596,21 +598,9 @@ def apply_metric(a, b, distance_calculation):
 
 
 def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.05):
-    """
-    Find all candidate indices where direction is close to horizontal (0°),
-    preferring candidates near the middle of the path.
-
-    Returns a list of indices, one per 0° crossing.
-
-    :param directions: np.ndarray of angles in radians
-    :param angle_tolerance_deg: tolerance around 0° to consider horizontal
-    :param edge_margin: fraction of path length to ignore at both ends
-    :return: list of candidate indices
-    """
     if len(directions) == 0:
         return []
 
-    # Convert to degrees and normalize to [-180, 180]
     angles_deg = np.degrees(directions)
     angles_deg = ((angles_deg + 180) % 360) - 180
 
@@ -619,25 +609,23 @@ def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin
     end = int((1.0 - edge_margin) * n)
     idx_range = np.arange(start, end)
 
-    # Absolute deviation from horizontal
     abs_dev = np.abs(angles_deg[idx_range])
-
-    # Candidate points within tolerance
     candidate_mask = abs_dev <= angle_tolerance_deg
     candidate_indices = idx_range[candidate_mask]
 
-    # Filter duplicates per crossing
-    # Only keep one candidate per consecutive block
-    candidates_filtered = []
-    if len(candidate_indices) > 0:
-        prev_idx = candidate_indices[0]
-        candidates_filtered.append(prev_idx)
-        for idx in candidate_indices[1:]:
-            if idx - prev_idx > 1:
-                candidates_filtered.append(idx)
-            prev_idx = idx
+    if len(candidate_indices) == 0:
+        # fallback: pick the closest to zero
+        fallback_idx = idx_range[np.argmin(abs_dev)]
+        candidate_indices = [fallback_idx]
+
+    # remove consecutive duplicates
+    candidates_filtered = [candidate_indices[0]]
+    for idx in candidate_indices[1:]:
+        if idx - candidates_filtered[-1] > 1:
+            candidates_filtered.append(idx)
 
     return candidates_filtered
+
 
 
 def find_lip_index_by_curvature(curvature, edge_margin=0.05):
@@ -771,6 +759,7 @@ def compute_distance_for_resample(path_template, shard_candidates, direction_deg
     dir_template_deg = ((dir_template_deg + 180) % 360) - 180
 
     template_candidates = find_all_lip_index_by_angle(dir_template)
+    # print(len(template_candidates))
     if len(template_candidates) == 0:
         return np.inf, None, None, None
 
