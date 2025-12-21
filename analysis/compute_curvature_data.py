@@ -1,39 +1,42 @@
 import io
-import os
 
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
+import numpy as np
 from PIL import Image
+from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from svgpathtools import svg2paths
 
 from analysis.analyze_curvature import normalize_path, curvature_from_points
-from database_handler import MongoDBHandler
 from analysis.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
     dtw_distance, integral_difference
+from database_handler import MongoDBHandler
 
 
-def compute_curvature_for_all_samples(distance_type_dataset, smooth_method="savgol", smooth_factor=0.02, smooth_window=15, n_samples=2000):
+def compute_curvature_for_all_items(analysis_config):
     """
     Compute curvature for ALL documents that have cleaned_svg (skip if already stored).
     For each document that does not have it call compute_and_store_curvature
 
-    :param smooth_method: "savgol" or "gaussian" or "bspline
-    :param smooth_factor: smoothing factor
-    :param smooth_window: smoothing window
-    :param n_samples: number of samples
+    :param analysis_config:
     :return:
     """
 
-    # create database handler
-    db_handler = MongoDBHandler("svg_data")
+    # set vars from analysis_config
+    db_handler = analysis_config.get("db_handler")
+    distance_type_dataset = analysis_config.get("distance_type_dataset")
+    smooth_method = analysis_config.get("smooth_method")
+    smooth_factor = analysis_config.get("smooth_factor")
+    smooth_window = analysis_config.get("smooth_window")
+    n_samples = analysis_config.get("n_samples")
+
+    # set collection of db_handler
     if distance_type_dataset == "other samples":
         db_handler.use_collection("svg_raw")
     else:
         db_handler.use_collection("svg_template_types")
 
-    # get all samples
+    # get all items
     docs = db_handler.collection.find({}, {"sample_id": 1, "cleaned_svg": 1, "curvature_data": 1})
 
     # init counter vars
@@ -41,10 +44,10 @@ def compute_curvature_for_all_samples(distance_type_dataset, smooth_method="savg
     skipped = 0
     errors = 0
 
-    # iterate over all samples
+    # iterate over all items
     for doc in docs:
-        sample_id = doc.get("sample_id")
-        if not sample_id:
+        current_sanple_id = doc.get("sample_id")
+        if not current_sanple_id:
             continue
 
         # load curvature data and smoothing settings of the doc
@@ -62,14 +65,8 @@ def compute_curvature_for_all_samples(distance_type_dataset, smooth_method="savg
             continue
 
         # Compute and overwrite stored curvature data if necessary
-        status = compute_curvature_for_one_sample(
-            distance_type_dataset,
-            sample_id,
-            smooth_method=smooth_method,
-            smooth_factor=smooth_factor,
-            smooth_window=smooth_window,
-            n_samples=n_samples
-        )
+        print("Debug: compute_curvature_for_one_item")
+        status = compute_curvature_for_one_item(analysis_config, current_sanple_id)
 
         if status.startswith("❌"):
             errors += 1
@@ -80,35 +77,35 @@ def compute_curvature_for_all_samples(distance_type_dataset, smooth_method="savg
     return f"✅ Recomputed: {processed}, ⏭️ Skipped (same settings): {skipped}, ❌ Errors: {errors}"
 
 
-def compute_curvature_for_one_sample(distance_type_dataset, sample_id,
-                                     smooth_method="savgol",
-                                     smooth_factor=0.02,
-                                     smooth_window=15,
-                                     n_samples=2000):
+def compute_curvature_for_one_item(analysis_config, current_sample_id):
     """
     Computes and stores curvature, direction, arc-length,
     and lip anchor indices for a single sample.
+
+    :param analysis_config:
+    return
     """
 
-    # convert sample_id to int
-    try:
-        sample_id = sample_id
-    except ValueError:
-        return f"❌ sample_id must be an integer."
+    # set vars from analysis_config
+    db_handler = analysis_config.get("db_handler")
+    distance_type_dataset = analysis_config.get("distance_type_dataset")
+    smooth_method = analysis_config.get("smooth_method")
+    smooth_factor = analysis_config.get("smooth_factor")
+    smooth_window = analysis_config.get("smooth_window")
+    n_samples = analysis_config.get("n_samples")
 
     # create db handler
-    db_handler = MongoDBHandler("svg_data")
     if distance_type_dataset == "other samples":
         db_handler.use_collection("svg_raw")
     else:
         db_handler.use_collection("svg_template_types")
 
     # get the doc of the sample_id
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    doc = db_handler.collection.find_one({"sample_id": current_sample_id})
     if doc is None:
-        return f"❌ No sample found with sample_id: {sample_id}"
+        return f"❌ No sample found with sample_id: {current_sample_id}"
     if "cleaned_svg" not in doc:
-        return f"❌ Field 'cleaned_svg' not found in document for sample_id: {sample_id}"
+        return f"❌ Field 'cleaned_svg' not found in document for sample_id: {current_sample_id}"
 
     # --- Parse SVG path ---
     if distance_type_dataset == "other samples":
@@ -118,39 +115,35 @@ def compute_curvature_for_one_sample(distance_type_dataset, sample_id,
         db_handler.use_collection("svg_template_types")
         svg_file_like = io.StringIO(doc["raw_content"])
 
-
     paths, _ = svg2paths(svg_file_like)
     if len(paths) == 0:
         return f"❌ No valid path found in SVG."
 
     path = paths[0]
 
-    # --- Sample points ---
+    # Sample points
     ts = np.linspace(0, 1, n_samples)
     points = np.array([path.point(t) for t in ts])
     points = np.column_stack((points.real, points.imag))
 
-    # --- Normalize & smooth ---
+    # Normalize & smooth
     points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
 
-    # --- Compute curvature ---
+    # Compute curvature
     curvature = curvature_from_points(points)
 
-    # --- Arc length (normalized) ---
+    # Arc length (normalized)
     arc_lengths = np.concatenate(
         ([0], np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1)))
     )
     arc_lengths /= arc_lengths[-1]
 
-    # --- Direction (angle to x-axis) ---
+    # Direction (angle to x-axis)
     diffs = np.diff(points, axis=0)
     directions = np.arctan2(diffs[:, 1], diffs[:, 0])
     directions = np.concatenate(([directions[0]], directions))
 
-    # ============================================================
     # 🆕 Lip anchor detection
-    # ============================================================
-
     lip_idx_angle = find_lip_index_by_angle(directions)
     lip_idx_curvature = find_lip_index_by_curvature(curvature)
 
@@ -163,10 +156,11 @@ def compute_curvature_for_one_sample(distance_type_dataset, sample_id,
         if lip_idx_curvature is not None else None
     )
 
-    # --- Store in DB ---
+    # Store in DB
     db_handler.collection.update_one(
-        {"sample_id": sample_id},
+        {"sample_id": current_sample_id},
         {"$set": {
+            "closest_matches_valid": False,
             "curvature_data": {
                 "arc_lengths": arc_lengths.tolist(),
                 "curvature": curvature.tolist(),
@@ -183,7 +177,6 @@ def compute_curvature_for_one_sample(distance_type_dataset, sample_id,
                         "arc_length": lip_arc_curvature
                     }
                 },
-
                 "settings": {
                     "smooth_method": smooth_method,
                     "smooth_factor": smooth_factor,
@@ -194,27 +187,25 @@ def compute_curvature_for_one_sample(distance_type_dataset, sample_id,
         }}
     )
 
-    return f"✅ Curvature + lip anchors stored for sample_id {sample_id}"
+    return f"✅ Curvature + lip anchors stored for sample_id {current_sample_id}"
 
 
-def generate_all_plots(distance_type_dataset, sample_id,
-                       smooth_method="savgol",
-                       smooth_factor=0.02,
-                       smooth_window=15,
-                       n_samples=2000):
+def generate_all_plots(analysis_config):
     """
     Compute curvature if missing or settings changed, otherwise load from DB.
     Also generates debug plots with lip anchor markers.
     """
 
-    # Convert sample_id to int
-    try:
-        sample_id = sample_id
-    except ValueError:
-        return None, None, None, "❌ sample_id must be an integer."
+    # set vars from analysis_config
+    db_handler = analysis_config.get("db_handler")
+    sample_id = analysis_config.get("sample_id")
+    distance_type_dataset = analysis_config.get("distance_type_dataset")
+    smooth_method = analysis_config.get("smooth_method")
+    smooth_factor = analysis_config.get("smooth_factor")
+    smooth_window = analysis_config.get("smooth_window")
+    n_samples = analysis_config.get("n_samples")
 
-    # create db handler
-    db_handler = MongoDBHandler("svg_data")
+    # set db handler
     if distance_type_dataset == "other samples":
         db_handler.use_collection("svg_raw")
     else:
@@ -230,23 +221,17 @@ def generate_all_plots(distance_type_dataset, sample_id,
     if "curvature_data" in doc and "settings" in doc["curvature_data"]:
         stored = doc["curvature_data"]["settings"]
         if (
-            stored.get("smooth_method") == smooth_method and
-            float(stored.get("smooth_factor", 0)) == float(smooth_factor) and
-            int(stored.get("smooth_window", 0)) == int(smooth_window) and
-            int(stored.get("n_samples", 0)) == int(n_samples)
+                stored.get("smooth_method") == smooth_method and
+                float(stored.get("smooth_factor", 0)) == float(smooth_factor) and
+                int(stored.get("smooth_window", 0)) == int(smooth_window) and
+                int(stored.get("n_samples", 0)) == int(n_samples)
         ):
             recompute = False
 
     # compute data if needed
     if recompute:
-        compute_curvature_for_one_sample(
-            distance_type_dataset,
-            sample_id,
-            smooth_method=smooth_method,
-            smooth_factor=smooth_factor,
-            smooth_window=smooth_window,
-            n_samples=n_samples
-        )
+        print("Debug: recompute of plots")
+        compute_curvature_for_one_item(analysis_config, sample_id)
         doc = db_handler.collection.find_one({"sample_id": sample_id})
 
     curvature_data = doc["curvature_data"]
@@ -260,9 +245,7 @@ def generate_all_plots(distance_type_dataset, sample_id,
 
     status_msg = f"✅ Loaded stored curvature for sample_id {sample_id}"
 
-    # ------------------------------------------------------------
     # Reconstruct points for color map
-    # ------------------------------------------------------------
     svg_file_like = io.StringIO(doc["cleaned_svg"])
     paths, _ = svg2paths(svg_file_like)
     path = paths[0]
@@ -279,7 +262,7 @@ def generate_all_plots(distance_type_dataset, sample_id,
     points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
 
     # ============================================================
-    # 1️⃣ Curvature line plot (with lip markers)
+    # Curvature line plot (with lip markers)
     # ============================================================
     buf1 = io.BytesIO()
     plt.figure(figsize=(10, 4))
@@ -307,7 +290,7 @@ def generate_all_plots(distance_type_dataset, sample_id,
     curvature_plot_img = Image.open(buf1)
 
     # ============================================================
-    # 2️⃣ Curvature color map (geometry view)
+    # Curvature color map (geometry view)
     # ============================================================
     segments = np.stack([points[:-1], points[1:]], axis=1)
     norm = Normalize(
@@ -334,7 +317,7 @@ def generate_all_plots(distance_type_dataset, sample_id,
     curvature_color_img = Image.open(buf2)
 
     # ============================================================
-    # 3️⃣ Direction plot (with lip markers)
+    # Direction plot (with lip markers)
     # ============================================================
     directions = np.unwrap(directions)
     directions_deg = np.degrees(directions)
@@ -365,27 +348,21 @@ def generate_all_plots(distance_type_dataset, sample_id,
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
-
-def find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_dataset, distance_calculation, top_k=5):
+def find_enhanced_closest_curvature(analysis_config, top_k=5):
     """
     calculate close samples and save to db. return the top result
 
-    :param distance_type_dataset:
-    :param sample_id:
-    :param distance_dataset:
-    :param distance_calculation:
+    :param analysis_config:
     :param top_k:
     :return:
     """
 
-    # convert sample_id to int
-    try:
-        sample_id = sample_id
-    except:
-        return None, None, f"Invalid sample_id {sample_id}"
+    # set vars from analysis_config
+    db_handler = analysis_config.get("db_handler")
+    sample_id = analysis_config.get("sample_id")
+    distance_type_dataset = analysis_config.get("distance_type_dataset")
 
     # create db handler
-    db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
 
     # get the sample from db and its curvature and direction (angle)
@@ -402,9 +379,7 @@ def find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_d
         db_handler.use_collection("svg_template_types")
 
     # compute distances
-    top_matches = calculate_distances(sample_id, curvature, direction, db_handler,
-        distance_dataset, distance_calculation, top_k
-    )
+    top_matches = calculate_distances(analysis_config, curvature, direction, top_k)
 
     if not top_matches:
         return None, None, "No comparable samples found."
@@ -414,7 +389,9 @@ def find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_d
     # save results
     db_handler.collection.update_one(
         {"sample_id": sample_id},
-        {"$set": {"closest_matches": top_matches}}
+        {"$set": {"closest_matches": top_matches,
+                  "closest_matches_valid": True}
+         }
     )
 
     closest = top_matches[0]
@@ -423,19 +400,19 @@ def find_enhanced_closest_curvature(distance_type_dataset, sample_id, distance_d
     return closest["id"], closest["distance"], msg
 
 
-def calculate_distances(sample_id, curvature, direction, db_handler, distance_dataset,
-                        distance_calculation, top_k=5):
+def calculate_distances(analysis_config, curvature, direction, top_k=5):
     """
 
-    :param sample_id:
-    :param curvature:
     :param direction:
-    :param db_handler:
-    :param distance_dataset:
-    :param distance_calculation:
+    :param curvature:
+    :param analysis_config:
     :param top_k:
     :return:
     """
+
+    # set vars from analysis_config
+    db_handler = analysis_config.get("db_handler")
+    sample_id = analysis_config.get("sample_id")
 
     # setup distances list
     distances = []
@@ -453,12 +430,8 @@ def calculate_distances(sample_id, curvature, direction, db_handler, distance_da
         other_dir = np.array(curv_data["directions"])
 
         # get distance list from select_arrays (already calculated)
-        dist = get_distance(oid, sample_id,
-            curvature, other_curv,
-            direction, other_dir,
-            distance_dataset,
-            distance_calculation
-        )
+        dist = get_distance(analysis_config, oid, curvature, other_curv,
+                            direction, other_dir)
 
         distances.append((oid, dist))
 
@@ -473,279 +446,125 @@ def calculate_distances(sample_id, curvature, direction, db_handler, distance_da
     return top_matches
 
 
-def get_distance(oid, sample_id, curvature, other_curvature, direction, other_direction, distance_dataset, distance_calculation):
+def get_distance(analysis_config, oid, curvature, other_curv,
+                 direction, other_dir):
     """
     Compute distance between shard and template using different methods.
     """
 
+    # set vars from analysis_config
+    sample_id = analysis_config.get("sample_id")
+    distance_value_dataset = analysis_config.get("distance_value_dataset")
+    distance_calculation = analysis_config.get("distance_calculation")
 
     # get amount of elements in the cropped 10%
     curve_len = len(curvature)
     crop = int(curve_len * 0.10)
-
     if curve_len <= 2 * crop:
-        return None  # skip malformed samples
+        return None
 
     # dataset selection
-    if distance_dataset == "only curvature":
+    if distance_value_dataset == "only curvature":
 
+        return float(sum([apply_metric(curvature, other_curv, distance_calculation)]))
 
-        return float(sum([apply_metric(curvature, other_curvature, distance_calculation)]))
+    elif distance_value_dataset == "lip_aligned_angle":
 
-
-
-
-
-
-
-
-    elif distance_dataset == "lip_aligned_angle":
-
+        n_samples = analysis_config.get("n_samples")
+        # validate arrays
         if direction is None:
             return None
-
         n_shard = len(direction)
-
         if n_shard < 20:
             return None
 
-        # ----------------------------
-
         # Convert sample directions to degrees in [-180, 180]
-
-        # ----------------------------
-
         direction_deg = np.degrees(direction)
-
         direction_deg = ((direction_deg + 180) % 360) - 180
 
-        # Find candidate zero-crossings for the shard
-
+        # Find candidates zero-crossings for the shard
         shard_candidates = find_all_lip_index_by_angle(direction)
-
         if len(shard_candidates) == 0:
             return None
 
-        # ----------------------------
-
         # Load template SVG from DB
-
-        # ----------------------------
-
         db_handler = MongoDBHandler("svg_data")
-
         db_handler.use_collection("svg_template_types")
-
         template_doc = db_handler.collection.find_one({"sample_id": oid})
-
         if template_doc is None or "raw_content" not in template_doc:
             return None
-
-        svg_file_like = io.StringIO(template_doc["raw_content"])
-
-        paths, _ = svg2paths(svg_file_like)
-
+        raw_template_svg = io.StringIO(template_doc["raw_content"])
+        paths, _ = svg2paths(raw_template_svg)
         if len(paths) == 0:
             return None
-
         path_template = paths[0]
 
-        # ----------------------------
-
-        # Iterative resampling
-
-        # ----------------------------
-
+        # Ternary search over n_resample
         min_distance = np.inf
-
         best_dir_aligned_crop = None
-
         best_shard_candidate = None
-
         best_template_candidate = None
 
-        n_resample = 2000
+        left = n_samples  # start from usual n_samples
+        right = 20000  # maximum resample
 
-        while n_resample <= 15000:
+        while left < right:
 
-            # Sample points along template SVG
+            mid1 = left + (right - left) // 3
+            mid2 = left + 2 * (right - left) // 3
+            dist1, crop1, shard1, temp1 = compute_distance_for_resample(
+                path_template, shard_candidates, direction_deg, n_shard, mid1
+            )
+            dist2, crop2, shard2, temp2 = compute_distance_for_resample(
+                path_template, shard_candidates, direction_deg, n_shard, mid2
+            )
 
-            ts = np.linspace(0, 1, n_resample)
+            # Shrink search interval
+            if dist1 < dist2:
+                right = mid2 - 1
+            else:
+                left = mid1 + 1
 
-            points = np.array([path_template.point(t) for t in ts])
-
-            points = np.column_stack((points.real, points.imag))
-
-            # Smooth like in compute_curvature_for_one_sample
-
-            points = normalize_path(points, smooth_method="savgol", smooth_factor=0.02, smooth_window=15)
-
-            # Compute template directions in degrees [-180, 180]
-
-            diffs = np.diff(points, axis=0)
-
-            dir_template = np.arctan2(diffs[:, 1], diffs[:, 0])
-
-            dir_template = np.concatenate(([dir_template[0]], dir_template))
-
-            dir_template_deg = np.degrees(dir_template)
-
-            dir_template_deg = ((dir_template_deg + 180) % 360) - 180
-
-            # Find candidate zero-crossings for the template
-
-            template_candidates = find_all_lip_index_by_angle(dir_template)
-
-            if len(template_candidates) == 0:
-                n_resample += 100
-
-                continue
-
-            # ----------------------------
-
-            # Iterate over all candidate pairs
-
-            # ----------------------------
-
-            for shard_idx in shard_candidates:
-
-                for template_idx in template_candidates:
-
-                    # Align template by candidate zero-crossing
-
-                    shift = shard_idx - template_idx
-
-                    dir_aligned_deg = np.roll(dir_template_deg, shift)
-
-                    # Truncate to shard length
-
-                    dir_aligned_crop = dir_aligned_deg[:n_shard]
-
-                    # Angular distance (squared)
-
-                    diffs_angle = direction_deg[:len(dir_aligned_crop)] - dir_aligned_crop
-
-                    distance = np.mean(diffs_angle ** 2)
-
-                    # Track minimum distance
-
-                    if distance < min_distance:
-                        min_distance = distance
-
-                        best_dir_aligned_crop = dir_aligned_crop.copy()
-
-                        best_shard_candidate = shard_idx
-
-                        best_template_candidate = template_idx
-
-            n_resample += 100
+            # Track overall minimum
+            if dist1 < min_distance:
+                min_distance = dist1
+                best_dir_aligned_crop = crop1
+                best_shard_candidate = shard1
+                best_template_candidate = temp1
+            if dist2 < min_distance:
+                min_distance = dist2
+                best_dir_aligned_crop = crop2
+                best_shard_candidate = shard2
+                best_template_candidate = temp2
 
         if not np.isfinite(min_distance):
             return None
 
-        # ----------------------------
-
-        # Plot only the template with minimum distance
-
-        # ----------------------------
-
         if best_dir_aligned_crop is not None:
-            plot_lip_alignment(direction_deg, best_dir_aligned_crop, best_shard_candidate, sample_id, oid)
-
+            print("Debug: theory calc")
         return float(min_distance)
 
-
-
-
-    elif distance_dataset == "lip_aligned_curvature":
-
-        # --------------------------------------------
-        # Sanity checks
-        # --------------------------------------------
-        if curvature is None or other_curvature is None:
-            return None
-
-        n1 = len(curvature)
-        n2 = len(other_curvature)
-        if n1 < 10 or n2 < 10:
-            return None
-
-        # --------------------------------------------
-        # Arc-length domains
-        # --------------------------------------------
-        s1 = np.linspace(0.0, 1.0, n1)
-        s2 = np.linspace(0.0, 1.0, n2)
-
-        # --------------------------------------------
-        # Lip detection (CURVATURE)
-        # --------------------------------------------
-        lip_idx_1 = find_lip_index_by_curvature(curvature)
-        lip_idx_2 = find_lip_index_by_curvature(other_curvature)
-        if lip_idx_1 is None or lip_idx_2 is None:
-            return None
-
-        lip_s_1 = s1[lip_idx_1]
-        lip_s_2 = s2[lip_idx_2]
-
-        # --------------------------------------------
-        # Arc-length alignment
-        # --------------------------------------------
-        delta_s = lip_s_1 - lip_s_2
-        s2_shifted = s2 + delta_s
-
-        # --------------------------------------------
-        # Overlap window
-        # --------------------------------------------
-        s_min = max(0.0, np.min(s2_shifted))
-        s_max = min(1.0, np.max(s2_shifted))
-        if s_max <= s_min:
-            return None
-
-        # --------------------------------------------
-        # Crop to overlap
-        # --------------------------------------------
-        mask_1 = (s1 >= s_min) & (s1 <= s_max)
-        mask_2 = (s2_shifted >= s_min) & (s2_shifted <= s_max)
-
-        curv_1 = curvature[mask_1]
-        dir_1 = direction[mask_1]
-        curv_2 = other_curvature[mask_2]
-        dir_2 = other_direction[mask_2]
-        s2_valid = s2_shifted[mask_2]
-
-        if len(curv_1) < 10 or len(curv_2) < 10:
-            return None
-
-        # Interpolate template onto shard grid
-        s_common = s1[mask_1]
-        curv_2_interp = np.interp(s_common, s2_valid, curv_2)
-        dir_2_interp = np.interp(s_common, s2_valid, dir_2)
-
-        # Distance
-        d_curv = apply_metric(curv_1, curv_2_interp, distance_dataset)
-        d_dir = apply_metric(dir_1, dir_2_interp, distance_dataset)
-        return float(d_curv + d_dir)
-
-    elif distance_dataset == "cropped curvature":
-        return float(sum([apply_metric(curvature[crop:-crop], other_curvature[crop:-crop], distance_calculation)]))
-    elif distance_dataset == "only angle":
-        return float(sum([apply_metric(direction, other_direction, distance_calculation)]))
-    elif distance_dataset == "cropped angle":
-        return float(sum([apply_metric(direction[crop:-crop], other_direction[crop:-crop], distance_calculation)]))
-    elif distance_dataset == "cropped curvature and angle":
+    elif distance_value_dataset == "lip_aligned_curvature":
+        return None
+    elif distance_value_dataset == "cropped curvature":
+        return float(sum([apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation)]))
+    elif distance_value_dataset == "only angle":
+        return float(sum([apply_metric(direction, other_dir, distance_calculation)]))
+    elif distance_value_dataset == "cropped angle":
+        return float(sum([apply_metric(direction[crop:-crop], other_dir[crop:-crop], distance_calculation)]))
+    elif distance_value_dataset == "cropped curvature and angle":
         return float(sum([
-            apply_metric(curvature[crop:-crop], other_curvature[crop:-crop], distance_calculation),
-            apply_metric(direction[crop:-crop], other_direction[crop:-crop], distance_calculation)
+            apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation),
+            apply_metric(direction[crop:-crop], other_dir[crop:-crop], distance_calculation)
         ]))
 
     print("Calculating distance...")
 
     # default fallback: full curvature + full angle
     return float(sum([
-        apply_metric(curvature, other_curvature, distance_calculation),
-        apply_metric(direction, other_direction, distance_calculation)
+        apply_metric(curvature, other_curv, distance_calculation),
+        apply_metric(direction, other_dir, distance_calculation)
     ]))
-
 
 
 def apply_metric(a, b, distance_calculation):
@@ -776,7 +595,6 @@ def apply_metric(a, b, distance_calculation):
         raise ValueError(f"Unknown distance_calculation: {distance_calculation}")
 
 
-# TODO take middle 0 degres
 def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.05):
     """
     Find all candidate indices where direction is close to horizontal (0°),
@@ -860,7 +678,7 @@ def find_lip_index_by_curvature(curvature, edge_margin=0.05):
 
 
 def angular_difference(a, b):
-    delta = (a - b + np.pi) % (2*np.pi) - np.pi
+    delta = (a - b + np.pi) % (2 * np.pi) - np.pi
     return delta
 
 
@@ -896,6 +714,7 @@ def plot_lip_alignment(shard_deg, template_deg, zero_idx_shard, sample_id, templ
     plt.close()
 
     print(f"Saved lip alignment plot to {filepath}")
+
 
 def find_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.05):
     """
@@ -937,3 +756,40 @@ def find_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.0
     # Fallback: global minimum deviation (still middle-biased)
     fallback_idx = idx_range[np.argmin(abs_dev)]
     return int(fallback_idx)
+
+
+def compute_distance_for_resample(path_template, shard_candidates, direction_deg, n_shard, n_resample):
+    ts = np.linspace(0, 1, n_resample)
+    points = np.array([path_template.point(t) for t in ts])
+    points = np.column_stack((points.real, points.imag))
+    points = normalize_path(points, smooth_method="savgol", smooth_factor=0.02, smooth_window=15)
+
+    diffs = np.diff(points, axis=0)
+    dir_template = np.arctan2(diffs[:, 1], diffs[:, 0])
+    dir_template = np.concatenate(([dir_template[0]], dir_template))
+    dir_template_deg = np.degrees(dir_template)
+    dir_template_deg = ((dir_template_deg + 180) % 360) - 180
+
+    template_candidates = find_all_lip_index_by_angle(dir_template)
+    if len(template_candidates) == 0:
+        return np.inf, None, None, None
+
+    local_min = np.inf
+    local_best_crop = None
+    local_shard_candidate = None
+    local_template_candidate = None
+
+    for shard_idx in shard_candidates:
+        for template_idx in template_candidates:
+            shift = shard_idx - template_idx
+            dir_aligned_deg = np.roll(dir_template_deg, shift)
+            dir_aligned_crop = dir_aligned_deg[:n_shard]
+            diffs_angle = direction_deg[:len(dir_aligned_crop)] - dir_aligned_crop
+            distance_val = np.mean(diffs_angle ** 2)
+            if distance_val < local_min:
+                local_min = distance_val
+                local_best_crop = dir_aligned_crop.copy()
+                local_shard_candidate = shard_idx
+                local_template_candidate = template_idx
+
+    return local_min, local_best_crop, local_shard_candidate, local_template_candidate
