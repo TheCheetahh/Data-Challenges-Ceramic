@@ -65,6 +65,7 @@ def compute_curvature_for_all_items(analysis_config):
             continue
 
         # Compute and overwrite stored curvature data if necessary
+        print("Debug: compute_curvature_for_one_item")
         status = compute_curvature_for_one_item(analysis_config, current_sanple_id)
 
         if status.startswith("❌"):
@@ -76,7 +77,7 @@ def compute_curvature_for_all_items(analysis_config):
     return f"✅ Recomputed: {processed}, ⏭️ Skipped (same settings): {skipped}, ❌ Errors: {errors}"
 
 
-def compute_curvature_for_one_item(analysis_config, current_sanple_id):
+def compute_curvature_for_one_item(analysis_config, current_sample_id):
     """
     Computes and stores curvature, direction, arc-length,
     and lip anchor indices for a single sample.
@@ -100,11 +101,11 @@ def compute_curvature_for_one_item(analysis_config, current_sanple_id):
         db_handler.use_collection("svg_template_types")
 
     # get the doc of the sample_id
-    doc = db_handler.collection.find_one({"sample_id": current_sanple_id})
+    doc = db_handler.collection.find_one({"sample_id": current_sample_id})
     if doc is None:
-        return f"❌ No sample found with sample_id: {current_sanple_id}"
+        return f"❌ No sample found with sample_id: {current_sample_id}"
     if "cleaned_svg" not in doc:
-        return f"❌ Field 'cleaned_svg' not found in document for sample_id: {current_sanple_id}"
+        return f"❌ Field 'cleaned_svg' not found in document for sample_id: {current_sample_id}"
 
     # --- Parse SVG path ---
     if distance_type_dataset == "other samples":
@@ -155,10 +156,11 @@ def compute_curvature_for_one_item(analysis_config, current_sanple_id):
         if lip_idx_curvature is not None else None
     )
 
-    # --- Store in DB ---
+    # Store in DB
     db_handler.collection.update_one(
-        {"sample_id": current_sanple_id},
+        {"sample_id": current_sample_id},
         {"$set": {
+            "closest_matches_valid": False,
             "curvature_data": {
                 "arc_lengths": arc_lengths.tolist(),
                 "curvature": curvature.tolist(),
@@ -185,7 +187,7 @@ def compute_curvature_for_one_item(analysis_config, current_sanple_id):
         }}
     )
 
-    return f"✅ Curvature + lip anchors stored for sample_id {current_sanple_id}"
+    return f"✅ Curvature + lip anchors stored for sample_id {current_sample_id}"
 
 
 def generate_all_plots(analysis_config):
@@ -228,7 +230,8 @@ def generate_all_plots(analysis_config):
 
     # compute data if needed
     if recompute:
-        compute_curvature_for_one_item(analysis_config)
+        print("Debug: recompute of plots")
+        compute_curvature_for_one_item(analysis_config, sample_id)
         doc = db_handler.collection.find_one({"sample_id": sample_id})
 
     curvature_data = doc["curvature_data"]
@@ -386,7 +389,9 @@ def find_enhanced_closest_curvature(analysis_config, top_k=5):
     # save results
     db_handler.collection.update_one(
         {"sample_id": sample_id},
-        {"$set": {"closest_matches": top_matches}}
+        {"$set": {"closest_matches": top_matches,
+                  "closest_matches_valid": True}
+         }
     )
 
     closest = top_matches[0]
@@ -554,8 +559,8 @@ def get_distance(analysis_config, oid, curvature, other_curv,
 
         # Plot only the template with minimum distance
         if best_dir_aligned_crop is not None:
-            plot_lip_alignment(direction_deg, best_dir_aligned_crop, best_shard_candidate, sample_id, oid)
-
+            # plot_lip_alignment(direction_deg, best_dir_aligned_crop, best_shard_candidate, sample_id, oid)
+            print("Debug: theory calc")
         return float(min_distance)
 
 
