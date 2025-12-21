@@ -470,6 +470,7 @@ def get_distance(analysis_config, oid, curvature, other_curv,
 
     elif distance_value_dataset == "lip_aligned_angle":
 
+        n_samples = analysis_config.get("n_samples")
         # validate arrays
         if direction is None:
             return None
@@ -498,71 +499,50 @@ def get_distance(analysis_config, oid, curvature, other_curv,
             return None
         path_template = paths[0]
 
-        # Iterative resampling
+        # Ternary search over n_resample
         min_distance = np.inf
         best_dir_aligned_crop = None
         best_shard_candidate = None
         best_template_candidate = None
 
-        n_resample = 2000
-        while n_resample <= 15000:
+        left = n_samples  # start from usual n_samples
+        right = 20000  # maximum resample
 
-            # Sample points along template SVG
-            ts = np.linspace(0, 1, n_resample)
-            points = np.array([path_template.point(t) for t in ts])
-            points = np.column_stack((points.real, points.imag))
+        while left < right:
 
-            # Smooth like in compute_curvature_for_one_sample
-            points = normalize_path(points, smooth_method="savgol", smooth_factor=0.02, smooth_window=15)
+            mid1 = left + (right - left) // 3
+            mid2 = left + 2 * (right - left) // 3
+            dist1, crop1, shard1, temp1 = compute_distance_for_resample(
+                path_template, shard_candidates, direction_deg, n_shard, mid1
+            )
+            dist2, crop2, shard2, temp2 = compute_distance_for_resample(
+                path_template, shard_candidates, direction_deg, n_shard, mid2
+            )
 
-            # Compute template directions in degrees [-180, 180]
-            diffs = np.diff(points, axis=0)
-            dir_template = np.arctan2(diffs[:, 1], diffs[:, 0])
-            dir_template = np.concatenate(([dir_template[0]], dir_template))
-            dir_template_deg = np.degrees(dir_template)
-            dir_template_deg = ((dir_template_deg + 180) % 360) - 180
+            # Shrink search interval
+            if dist1 < dist2:
+                right = mid2 - 1
+            else:
+                left = mid1 + 1
 
-            # Find candidate zero-crossings for the template
-            template_candidates = find_all_lip_index_by_angle(dir_template)
-
-            if len(template_candidates) == 0:
-                n_resample += 100
-                continue
-
-            # Iterate over all candidate pairs
-            for shard_idx in shard_candidates:
-
-                for template_idx in template_candidates:
-
-                    # Align template by candidate zero-crossing
-                    shift = shard_idx - template_idx
-                    dir_aligned_deg = np.roll(dir_template_deg, shift)
-
-                    # Truncate to shard length
-                    dir_aligned_crop = dir_aligned_deg[:n_shard]
-
-                    # Angular distance (squared)
-                    diffs_angle = direction_deg[:len(dir_aligned_crop)] - dir_aligned_crop
-                    distance = np.mean(diffs_angle ** 2)
-
-                    # Track minimum distance
-                    if distance < min_distance:
-                        min_distance = distance
-                        best_dir_aligned_crop = dir_aligned_crop.copy()
-                        best_shard_candidate = shard_idx
-                        best_template_candidate = template_idx
-
-            n_resample += 100
+            # Track overall minimum
+            if dist1 < min_distance:
+                min_distance = dist1
+                best_dir_aligned_crop = crop1
+                best_shard_candidate = shard1
+                best_template_candidate = temp1
+            if dist2 < min_distance:
+                min_distance = dist2
+                best_dir_aligned_crop = crop2
+                best_shard_candidate = shard2
+                best_template_candidate = temp2
 
         if not np.isfinite(min_distance):
             return None
 
-        # Plot only the template with minimum distance
         if best_dir_aligned_crop is not None:
-            # plot_lip_alignment(direction_deg, best_dir_aligned_crop, best_shard_candidate, sample_id, oid)
             print("Debug: theory calc")
         return float(min_distance)
-
 
     elif distance_value_dataset == "lip_aligned_curvature":
         return None
@@ -776,3 +756,40 @@ def find_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.0
     # Fallback: global minimum deviation (still middle-biased)
     fallback_idx = idx_range[np.argmin(abs_dev)]
     return int(fallback_idx)
+
+
+def compute_distance_for_resample(path_template, shard_candidates, direction_deg, n_shard, n_resample):
+    ts = np.linspace(0, 1, n_resample)
+    points = np.array([path_template.point(t) for t in ts])
+    points = np.column_stack((points.real, points.imag))
+    points = normalize_path(points, smooth_method="savgol", smooth_factor=0.02, smooth_window=15)
+
+    diffs = np.diff(points, axis=0)
+    dir_template = np.arctan2(diffs[:, 1], diffs[:, 0])
+    dir_template = np.concatenate(([dir_template[0]], dir_template))
+    dir_template_deg = np.degrees(dir_template)
+    dir_template_deg = ((dir_template_deg + 180) % 360) - 180
+
+    template_candidates = find_all_lip_index_by_angle(dir_template)
+    if len(template_candidates) == 0:
+        return np.inf, None, None, None
+
+    local_min = np.inf
+    local_best_crop = None
+    local_shard_candidate = None
+    local_template_candidate = None
+
+    for shard_idx in shard_candidates:
+        for template_idx in template_candidates:
+            shift = shard_idx - template_idx
+            dir_aligned_deg = np.roll(dir_template_deg, shift)
+            dir_aligned_crop = dir_aligned_deg[:n_shard]
+            diffs_angle = direction_deg[:len(dir_aligned_crop)] - dir_aligned_crop
+            distance_val = np.mean(diffs_angle ** 2)
+            if distance_val < local_min:
+                local_min = distance_val
+                local_best_crop = dir_aligned_crop.copy()
+                local_shard_candidate = shard_idx
+                local_template_candidate = template_idx
+
+    return local_min, local_best_crop, local_shard_candidate, local_template_candidate
