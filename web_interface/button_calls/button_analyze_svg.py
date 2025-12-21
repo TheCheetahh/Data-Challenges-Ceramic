@@ -89,8 +89,10 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_svg_html = format_svg_for_display(closest_svg_content)
 
         # Load its curvature data
+        analysis_config["sample_id"] = closest_id
         closest_plot_img, closest_color_img, closest_angle_img, _ = generate_all_plots(analysis_config)
         closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
+        analysis_config["sample_id"] = sample_id
     else:
         closest_svg_html = "<p>No closest match found</p>"
         closest_plot_img = None
