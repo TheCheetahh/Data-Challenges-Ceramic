@@ -49,17 +49,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     svg_html = format_svg_for_display(cleaned_svg)
 
     # Ensure all samples have curvature data, else compute and store it
-    # TODO del
-    """
-        if distance_type_dataset == "other samples":
-        compute_status = compute_curvature_for_all_items(analysis_config)
-        doc = db_handler.collection.find_one({"sample_id": sample_id})
-
-        # get all plots of current sample
-        curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
-    else:
-    """
-
     # compute curvature data for selected sample and all templates
     analysis_config["distance_type_dataset"] = "other samples"
     doc = db_handler.collection.find_one({"sample_id": sample_id})
@@ -83,11 +72,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     # if there was no error and an id was found
     if closest_id is not None:
         # Load its SVG
-        """
-                if distance_type_dataset == "other samples":
-            db_handler.use_collection("svg_raw")
-        else:
-        """
         db_handler.use_collection("svg_template_types")
 
         # get svg of closest match
@@ -115,11 +99,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     # Load the full list of closest matches from DB
     closest_matches_list = db_handler.get_closest_matches(sample_id)
 
-    '''
-        if distance_type_dataset == "other samples":
-        db_handler.use_collection("svg_raw")
-    else:
-    '''
     db_handler.use_collection("svg_template_types")
     closest_type = db_handler.get_sample_type(closest_id)
 
