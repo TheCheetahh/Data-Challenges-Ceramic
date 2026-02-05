@@ -20,6 +20,11 @@ css = """
     overflow-y: auto !important;
     display: block !important;
 }
+#centered_md {
+    text-align: center;
+    width: 100%;
+}
+
 """
 
 # main webpage code
@@ -144,6 +149,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
                     with gr.Row():
                         previous_sample_button = gr.Button("<-")
+                        index_display = gr.Markdown("-/-", elem_id="centered_md")
                         next_sample_button = gr.Button("->")
 
                     closest_svg_output = gr.HTML(
@@ -200,7 +206,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  sample_type_output,
                  closest_type_output,
                  closest_list_state,
-                 current_index_state
+                 current_index_state,
+                 index_display
                  ]
     )
 
@@ -221,7 +228,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_angle_plot_output,
             closest_type_output,
             current_index_state,
-            closest_sample_id_output
+            closest_sample_id_output,
+            index_display
         ]
     )
 
@@ -236,7 +244,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_angle_plot_output,  # angle_plot_img
             closest_type_output,  # typ_text
             current_index_state,  # new_index
-            closest_sample_id_output  # label_text
+            closest_sample_id_output,  # label_text
+            index_display
         ]
     )
 
@@ -257,6 +266,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  sample_type_output,
                  closest_type_output,
                  closest_list_state,
-                 current_index_state
+                 current_index_state,
+                 index_display
                  ]
     )
