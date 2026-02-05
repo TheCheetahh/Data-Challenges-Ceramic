@@ -6,6 +6,7 @@ from web_interface.button_calls.button_next_closest_sample import click_next_clo
 from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
+from web_interface.button_calls.button_batch_analyze import click_batch_analyze
 
 css = """
 /* target by elem_id and common class names used by Gradio versions */
@@ -111,7 +112,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         choices=[str(sid) for sid in db_handler.list_svg_ids()],
                         label="Select SVG to display"
                     )
-                    analyze_button = gr.Button("Analyze SVG")
+                    with gr.Row():
+
+                        analyze_button = gr.Button("Analyze SVG")
+                        batch_analyse_button = gr.Button("Analyze all Samples")
 
                     sample_type_output = gr.Textbox(
                         label="Sample Type",
@@ -234,4 +238,25 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             current_index_state,  # new_index
             closest_sample_id_output  # label_text
         ]
+    )
+
+    batch_analyse_button.click(
+        fn=click_batch_analyze,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        outputs=[svg_output,
+                 curvature_plot_output,
+                 curvature_color_output,
+                 angle_plot_output,
+                 status_output,
+                 closest_svg_output,
+                 closest_curvature_plot_output,
+                 closest_curvature_color_output,
+                 closest_angle_plot_output,
+                 closest_sample_id_output,
+                 sample_type_output,
+                 closest_type_output,
+                 closest_list_state,
+                 current_index_state
+                 ]
     )
