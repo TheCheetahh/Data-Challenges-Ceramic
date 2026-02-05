@@ -48,6 +48,7 @@ def click_previous_closest_sample(distance_type_dataset, distance_value_dataset,
     # --- compute next index ---
     new_index = (closest_index_state - 1) % len(closest_list_state)
 
+
     # --- get the next item ---
     next_item = closest_list_state[new_index]
     next_id = next_item.get("id")
@@ -94,5 +95,6 @@ def click_previous_closest_sample(distance_type_dataset, distance_value_dataset,
         angle_plot_img,
         typ_text,
         new_index,
-        label_text
+        label_text,
+        f"{new_index+1} / 20"
     )

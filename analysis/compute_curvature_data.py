@@ -348,7 +348,7 @@ def generate_all_plots(analysis_config):
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
-def find_enhanced_closest_curvature(analysis_config, top_k=5):
+def find_enhanced_closest_curvature(analysis_config, top_k=20):
     """
     calculate close samples and save to db. return the top result
 
@@ -400,7 +400,7 @@ def find_enhanced_closest_curvature(analysis_config, top_k=5):
     return closest["id"], closest["distance"], msg
 
 
-def calculate_distances(analysis_config, curvature, direction, top_k=5):
+def calculate_distances(analysis_config, curvature, direction, top_k=20):
     """
 
     :param direction:

@@ -94,5 +94,6 @@ def click_next_closest_sample(distance_type_dataset, distance_value_dataset, dis
         angle_plot_img,
         typ_text,
         new_index,
-        label_text
+        label_text,
+        f"{new_index+1} / 20"
     )

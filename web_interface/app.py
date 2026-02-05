@@ -6,6 +6,7 @@ from web_interface.button_calls.button_next_closest_sample import click_next_clo
 from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
+from web_interface.button_calls.button_batch_analyze import click_batch_analyze
 
 css = """
 /* target by elem_id and common class names used by Gradio versions */
@@ -19,6 +20,11 @@ css = """
     overflow-y: auto !important;
     display: block !important;
 }
+#centered_md {
+    text-align: center;
+    width: 100%;
+}
+
 """
 
 # main webpage code
@@ -111,7 +117,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         choices=[str(sid) for sid in db_handler.list_svg_ids()],
                         label="Select SVG to display"
                     )
-                    analyze_button = gr.Button("Analyze SVG")
+                    with gr.Row():
+
+                        analyze_button = gr.Button("Analyze SVG")
+                        batch_analyse_button = gr.Button("Analyze all Samples")
 
                     sample_type_output = gr.Textbox(
                         label="Sample Type",
@@ -140,6 +149,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
                     with gr.Row():
                         previous_sample_button = gr.Button("<-")
+                        index_display = gr.Markdown("-/-", elem_id="centered_md")
                         next_sample_button = gr.Button("->")
 
                     closest_svg_output = gr.HTML(
@@ -196,7 +206,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  sample_type_output,
                  closest_type_output,
                  closest_list_state,
-                 current_index_state
+                 current_index_state,
+                 index_display
                  ]
     )
 
@@ -217,7 +228,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_angle_plot_output,
             closest_type_output,
             current_index_state,
-            closest_sample_id_output
+            closest_sample_id_output,
+            index_display
         ]
     )
 
@@ -232,6 +244,29 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_angle_plot_output,  # angle_plot_img
             closest_type_output,  # typ_text
             current_index_state,  # new_index
-            closest_sample_id_output  # label_text
+            closest_sample_id_output,  # label_text
+            index_display
         ]
+    )
+
+    batch_analyse_button.click(
+        fn=click_batch_analyze,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        outputs=[svg_output,
+                 curvature_plot_output,
+                 curvature_color_output,
+                 angle_plot_output,
+                 status_output,
+                 closest_svg_output,
+                 closest_curvature_plot_output,
+                 closest_curvature_color_output,
+                 closest_angle_plot_output,
+                 closest_sample_id_output,
+                 sample_type_output,
+                 closest_type_output,
+                 closest_list_state,
+                 current_index_state,
+                 index_display
+                 ]
     )
