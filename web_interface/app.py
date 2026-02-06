@@ -7,6 +7,7 @@ from web_interface.button_calls.button_previous_closest_sample import click_prev
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 from web_interface.button_calls.button_batch_analyze import click_batch_analyze
+from web_interface.other_gradio_components.dropdown_crop_svg import change_crop_svg_dropdown
 
 css = """
 /* target by elem_id and common class names used by Gradio versions */
@@ -158,6 +159,43 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     closest_curvature_color_output = gr.Image(label="Curvature Color Map")
                     closest_angle_plot_output = gr.Image(label="Angle Plot")
 
+        with gr.Tab("Edit SVG Path"):
+            gr.Markdown("### Crop SVG Path")
+
+            crop_svg_dropdown = gr.Dropdown(
+                choices=[str(sid) for sid in db_handler.list_svg_ids()],
+                label="Select SVG to display",
+                interactive = True
+            )
+
+            crop_start = gr.Slider(
+                minimum=0.0,
+                maximum=0.5,
+                value=0.0,
+                step=0.01,
+                label="Crop start",
+                interactive=True
+            )
+
+            crop_end = gr.Slider(
+                minimum=0.51,
+                maximum=1.0,
+                value=1.0,
+                step=0.01,
+                label="Crop end",
+                interactive=True
+            )
+
+            with gr.Row():
+                full_svg_display = gr.HTML(
+                    label="Full SVG"
+                )
+
+                cropped_svg_display = gr.HTML(
+                    label="Cropped Path Preview"
+                )
+
+
     # Button logic:
     state_svg_type_sample = gr.State("sample")
     state_svg_type_template = gr.State("template")
@@ -181,13 +219,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         inputs=[theory_template_input, state_svg_type_template],
         outputs=[status_output_text]
     )
-    """
-    clean_svg_button.click(
-        fn=click_clean_svg,
-        inputs=[],
-        outputs=[status_output_text]
-    )
-    """
 
     analyze_button.click(
         fn=click_analyze_svg,
@@ -269,4 +300,22 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  current_index_state,
                  index_display
                  ]
+    )
+
+    crop_svg_dropdown.change(
+        fn=change_crop_svg_dropdown,
+        inputs=[crop_svg_dropdown, crop_start, crop_end],
+        outputs=[full_svg_display, cropped_svg_display]
+    )
+
+    crop_start.change(
+        fn=change_crop_svg_dropdown,
+        inputs=[crop_svg_dropdown, crop_start, crop_end],
+        outputs=[full_svg_display, cropped_svg_display]
+    )
+
+    crop_end.change(
+        fn=change_crop_svg_dropdown,
+        inputs=[crop_svg_dropdown, crop_start, crop_end],
+        outputs=[full_svg_display, cropped_svg_display]
     )
