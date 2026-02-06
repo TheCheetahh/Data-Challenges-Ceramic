@@ -1,5 +1,5 @@
 from database_handler import MongoDBHandler
-from web_interface.formating_functions.format_svg import format_svg_for_display
+from web_interface.formating_functions.format_svg import format_svg_for_display, remove_svg_fill
 from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_items, \
     find_enhanced_closest_curvature, compute_curvature_for_one_item
 
@@ -9,16 +9,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     """
     called by button
     calculates the graph data, stores it in db and displays it
-
-    :param distance_type_dataset:
-    :param distance_calculation:
-    :param distance_value_dataset:
-    :param sample_id:
-    :param smooth_method:
-    :param smooth_factor:
-    :param smooth_window:
-    :param n_samples:
-    :return:
     """
 
     # get a database handler
@@ -37,24 +27,38 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "n_samples": n_samples
     }
 
-    # Load cleaned SVG of selected sample id
-    cleaned_svg, error = db_handler.get_cleaned_svg(sample_id)
-    if error:
-        placeholder_html = f"<p style='color:red;'>❌ {error}</p>"
+    # Get the document to check for cropped_svg
+    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if not doc:
+        placeholder_html = f"<p style='color:red;'>❌ No document found for sample_id: {sample_id}</p>"
         return (
-            placeholder_html, None, None, f"❌ {error}",
-            placeholder_html, None, None, "❌ No closest match, because there was no valid cleaned_svg"
+            placeholder_html, None, None, None, f"❌ No document found",
+            placeholder_html, None, None, None, "❌ No closest match"
         )
-    # format the svg, so it can be displayed on the web page
-    svg_html = format_svg_for_display(cleaned_svg)
+
+    # Use cropped_svg if available, otherwise use cleaned_svg
+    svg_to_display = doc.get("cropped_svg") or doc.get("cleaned_svg")
+
+    if not svg_to_display:
+        placeholder_html = f"<p style='color:red;'>❌ No SVG data found</p>"
+        return (
+            placeholder_html, None, None, None, f"❌ No SVG data found",
+            placeholder_html, None, None, None, "❌ No closest match, because there was no valid SVG"
+        )
+
+    # Remove fill and format the svg for display
+    svg_no_fill = remove_svg_fill(svg_to_display)
+    svg_html = format_svg_for_display(svg_no_fill)
 
     # Ensure all samples have curvature data, else compute and store it
     # compute curvature data for selected sample and all templates
     analysis_config["distance_type_dataset"] = "other samples"
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
-    if not doc or not doc.get("closest_matches_valid", False):
+
+    # Recompute if outdated OR if closest matches are invalid
+    if doc.get("outdated_curvature", False) or not doc.get("closest_matches_valid", False):
         compute_status = compute_curvature_for_one_item(analysis_config, sample_id)
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
+        doc = db_handler.collection.find_one({"sample_id": sample_id})  # Reload doc after update
+
     # get all plots of current sample
     curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
     analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
@@ -63,7 +67,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     # Find close matches. Recalculate them if curvature data was recalculated and close matches are outdated.
     # Otherwise, load the closest match from the DB
     if not doc or not doc.get("closest_matches_valid", False):
-        # print(doc.get("closest_matches_valid", False))
         closest_id, distance, closest_msg = find_enhanced_closest_curvature(analysis_config)
     else:
         closest_id = doc["closest_matches"][0]["id"]
@@ -79,7 +82,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         if closest_error:
             closest_svg_html = f"<p style='color:red;'>Error loading closest SVG: {closest_error}</p>"
         else:
-            closest_svg_html = format_svg_for_display(closest_svg_content)
+            closest_svg_no_fill = remove_svg_fill(closest_svg_content)
+            closest_svg_html = format_svg_for_display(closest_svg_no_fill)
 
         # Load curvature data of closest match and generate plots
         analysis_config["sample_id"] = closest_id
@@ -110,7 +114,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Return all outputs
     return (
-        svg_html,  # Selected SVG
+        svg_html,  # Selected SVG (cropped if available)
         curvature_plot_img,  # Selected curvature line plot
         curvature_color_img,  # Selected curvature color map
         angle_plot_img,

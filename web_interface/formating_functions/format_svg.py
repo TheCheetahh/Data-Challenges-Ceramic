@@ -53,7 +53,7 @@ def remove_svg_fill(svg_string):
         # Convert back to string
         return ET.tostring(root, encoding='unicode', method='xml')
     except Exception as e:
-        print(f"Warning: Could not remove fill from SVG: {e}")
+        # print(f"Warning: Could not remove fill from SVG: {e}")
         return svg_string  # Return original on error
 
 
@@ -84,12 +84,12 @@ def crop_svg_path(svg_string, crop_start, crop_end):
         polyline = root.find('.//polyline')
 
     if polyline is None:
-        print("ERROR: No polyline found in SVG")
+        # print("ERROR: No polyline found in SVG")
         return svg_string  # Return original if no polyline found
 
     # Get the points
     points_str = polyline.get('points')
-    print(f"Original points count: {len(points_str.split()) // 2}")
+    # print(f"Original points count: {len(points_str.split()) // 2}")
 
     # Parse points into list of (x, y) tuples
     points = []
@@ -103,9 +103,9 @@ def crop_svg_path(svg_string, crop_start, crop_end):
     start_idx = int(total_points * crop_start)
     end_idx = int(total_points * crop_end)
 
-    print(f"Total points: {total_points}")
+    """print(f"Total points: {total_points}")
     print(f"Crop range: {crop_start} to {crop_end}")
-    print(f"Keeping points {start_idx} to {end_idx} ({end_idx - start_idx} points)")
+    print(f"Keeping points {start_idx} to {end_idx} ({end_idx - start_idx} points)")"""
 
     # Ensure valid range
     start_idx = max(0, min(start_idx, total_points - 1))
@@ -142,7 +142,7 @@ def crop_svg_path(svg_string, crop_start, crop_end):
     width = max_x - min_x + 2 * padding
     height = max_y - min_y + 2 * padding
 
-    print(f"New viewBox: {min_x} {min_y} {width} {height}")
+    # print(f"New viewBox: {min_x} {min_y} {width} {height}")
 
     root.set('viewBox', f"{min_x} {min_y} {width} {height}")
     root.set('width', f"{width}mm")
@@ -151,8 +151,8 @@ def crop_svg_path(svg_string, crop_start, crop_end):
     # Convert back to string
     cropped_svg = ET.tostring(root, encoding='unicode', method='xml')
 
-    print("Cropped SVG:")
+    """print("Cropped SVG:")
     print(cropped_svg[:500])  # Print first 500 chars
-    print("...")
+    print("...")"""
 
     return cropped_svg

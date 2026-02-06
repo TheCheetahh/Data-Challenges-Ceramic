@@ -11,7 +11,7 @@ def change_crop_svg_dropdown(sample_id):
     document = db_handler.collection.find_one({"sample_id": sample_id})
 
     if not document:
-        print(f"No document found for sample_id {sample_id}")
+        # print(f"No document found for sample_id {sample_id}")
         return "", "", 0.0, 1.0
 
     full_svg = document.get("cleaned_svg") or document.get("svg")
@@ -24,7 +24,7 @@ def change_crop_svg_dropdown(sample_id):
     crop_start = saved_crop_start if saved_crop_start is not None else 0.0
     crop_end = saved_crop_end if saved_crop_end is not None else 1.0
 
-    print(f"Loaded crop settings: start={crop_start}, end={crop_end}")
+    # print(f"Loaded crop settings: start={crop_start}, end={crop_end}")
 
     # Remove fill from full SVG
     full_svg_no_fill = remove_svg_fill(full_svg)
@@ -46,7 +46,7 @@ def update_crop_preview(sample_id, crop_start, crop_end):
     document = db_handler.collection.find_one({"sample_id": sample_id})
 
     if not document:
-        print(f"No document found for sample_id {sample_id}")
+        # print(f"No document found for sample_id {sample_id}")
         return "", ""
 
     full_svg = document.get("cleaned_svg") or document.get("svg")

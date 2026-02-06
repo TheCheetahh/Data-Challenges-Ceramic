@@ -10,7 +10,7 @@ def click_save_cropped_svg(sample_id, crop_start, crop_end):
 
     # Check if SVG was retrieved successfully
     if error or not full_svg:
-        print(f"Error retrieving SVG for sample_id {sample_id}: {error}")
+        # print(f"Error retrieving SVG for sample_id {sample_id}: {error}")
         return f"⚠ Error retrieving SVG for {sample_id}"
 
     # Create cropped SVG (already has fill removed in crop_svg_path)
@@ -26,16 +26,17 @@ def click_save_cropped_svg(sample_id, crop_start, crop_end):
             {
                 "cropped_svg": cropped_svg,
                 "crop_start": crop_start,
-                "crop_end": crop_end
+                "crop_end": crop_end,
+                "outdated_curvature": True
             }
         }
     )
 
     # Print confirmation
     if result.modified_count > 0:
-        print(f"✓ Saved cropped SVG for sample_id {sample_id} (crop: {crop_start} to {crop_end})")
+        # print(f"✓ Saved cropped SVG for sample_id {sample_id} (crop: {crop_start} to {crop_end})")
         return f"✓ Saved cropped SVG for {sample_id}"
     else:
-        print(f"⚠ No document updated for sample_id {sample_id}")
+        # print(f"⚠ No document updated for sample_id {sample_id}")
         return f"⚠ No document updated for {sample_id}"
 
