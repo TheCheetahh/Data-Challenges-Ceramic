@@ -4,10 +4,11 @@ from database_handler import MongoDBHandler
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
 from web_interface.button_calls.button_next_closest_sample import click_next_closest_sample
 from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
+from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 from web_interface.button_calls.button_batch_analyze import click_batch_analyze
-from web_interface.other_gradio_components.dropdown_crop_svg import change_crop_svg_dropdown
+from web_interface.other_gradio_components.crop_svg import change_crop_svg_dropdown, update_crop_preview
 
 css = """
 /* target by elem_id and common class names used by Gradio versions */
@@ -186,6 +187,9 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 interactive=True
             )
 
+            save_cropped_svg_button = gr.Button("Save cropped svg path")
+            save_status = gr.Textbox(label="Save Status", interactive=False)
+
             with gr.Row():
                 full_svg_display = gr.HTML(
                     label="Full SVG"
@@ -302,20 +306,29 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  ]
     )
 
+    # Dropdown change - loads from database and updates sliders
     crop_svg_dropdown.change(
         fn=change_crop_svg_dropdown,
-        inputs=[crop_svg_dropdown, crop_start, crop_end],
-        outputs=[full_svg_display, cropped_svg_display]
+        inputs=[crop_svg_dropdown],
+        outputs=[full_svg_display, cropped_svg_display, crop_start, crop_end]
     )
 
+    # Slider change
     crop_start.change(
-        fn=change_crop_svg_dropdown,
+        fn=update_crop_preview,
         inputs=[crop_svg_dropdown, crop_start, crop_end],
         outputs=[full_svg_display, cropped_svg_display]
     )
 
     crop_end.change(
-        fn=change_crop_svg_dropdown,
+        fn=update_crop_preview,
         inputs=[crop_svg_dropdown, crop_start, crop_end],
         outputs=[full_svg_display, cropped_svg_display]
     )
+
+    save_cropped_svg_button.click(
+        fn=click_save_cropped_svg,
+        inputs=[crop_svg_dropdown, crop_start, crop_end],
+        outputs=[save_status]
+    )
+
