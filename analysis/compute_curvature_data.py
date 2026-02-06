@@ -37,7 +37,7 @@ def compute_curvature_for_all_items(analysis_config):
         db_handler.use_collection("svg_template_types")
 
     # get all items
-    docs = db_handler.collection.find({}, {"sample_id": 1, "cleaned_svg": 1, "curvature_data": 1})
+    docs = db_handler.collection.find({}, {"sample_id": 1, "cleaned_svg": 1, "curvature_data": 1, "outdated_curvature": 1})
 
     # init counter vars
     processed = 0
@@ -46,16 +46,17 @@ def compute_curvature_for_all_items(analysis_config):
 
     # iterate over all items
     for doc in docs:
-        current_sanple_id = doc.get("sample_id")
-        if not current_sanple_id:
+        current_sample_id = doc.get("sample_id")
+        if not current_sample_id:
             continue
 
         # load curvature data and smoothing settings of the doc
         stored_data = doc.get("curvature_data")
         stored_settings = stored_data.get("settings", {}) if stored_data else {}
 
-        # if the loaded curvature data has the same settings as the current settings skip this doc
+        # Skip if curvature is up-to-date (same settings AND not marked as outdated)
         if (
+                not doc.get("outdated_curvature", False) and
                 stored_settings.get("smooth_method") == smooth_method and
                 float(stored_settings.get("smooth_factor", 0)) == float(smooth_factor) and
                 int(stored_settings.get("smooth_window", 0)) == int(smooth_window) and
@@ -65,8 +66,7 @@ def compute_curvature_for_all_items(analysis_config):
             continue
 
         # Compute and overwrite stored curvature data if necessary
-        # print("Debug: compute_curvature_for_one_item")
-        status = compute_curvature_for_one_item(analysis_config, current_sanple_id)
+        status = compute_curvature_for_one_item(analysis_config, current_sample_id)
 
         if status.startswith("❌"):
             errors += 1
@@ -81,6 +81,7 @@ def compute_curvature_for_one_item(analysis_config, current_sample_id):
     """
     Computes and stores curvature, direction, arc-length,
     and lip anchor indices for a single sample.
+    Uses cropped_svg if available, otherwise falls back to cleaned_svg.
 
     :param analysis_config:
     return
@@ -104,13 +105,21 @@ def compute_curvature_for_one_item(analysis_config, current_sample_id):
     doc = db_handler.collection.find_one({"sample_id": current_sample_id})
     if doc is None:
         return f"❌ No sample found with sample_id: {current_sample_id}"
-    if "cleaned_svg" not in doc:
-        return f"❌ Field 'cleaned_svg' not found in document for sample_id: {current_sample_id}"
 
     # --- Parse SVG path ---
     if distance_type_dataset == "other samples":
         db_handler.use_collection("svg_raw")
-        svg_file_like = io.StringIO(doc["cleaned_svg"])
+
+        # Use cropped_svg if available, otherwise use cleaned_svg
+        svg_content = doc.get("cropped_svg") or doc.get("cleaned_svg")
+
+        if not svg_content:
+            return f"❌ No SVG data found (neither cropped_svg nor cleaned_svg) for sample_id: {current_sample_id}"
+
+        svg_file_like = io.StringIO(svg_content)
+        print(
+            f"Using {'cropped_svg' if 'cropped_svg' in doc and doc.get('cropped_svg') else 'cleaned_svg'} for sample_id: {current_sample_id}")
+
     else:
         db_handler.use_collection("svg_template_types")
         svg_file_like = io.StringIO(doc["raw_content"])
@@ -161,6 +170,7 @@ def compute_curvature_for_one_item(analysis_config, current_sample_id):
         {"sample_id": current_sample_id},
         {"$set": {
             "closest_matches_valid": False,
+            "outdated_curvature": False,
             "curvature_data": {
                 "arc_lengths": arc_lengths.tolist(),
                 "curvature": curvature.tolist(),
@@ -246,7 +256,9 @@ def generate_all_plots(analysis_config):
     status_msg = f"✅ Loaded stored curvature for sample_id {sample_id}"
 
     # Reconstruct points for color map
-    svg_file_like = io.StringIO(doc["cleaned_svg"])
+    # Use cropped_svg if available, otherwise use cleaned_svg
+    svg_file_like = io.StringIO(doc.get("cropped_svg") or doc.get("cleaned_svg"))
+
     paths, _ = svg2paths(svg_file_like)
     path = paths[0]
 
