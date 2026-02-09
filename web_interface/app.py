@@ -1,6 +1,7 @@
 import gradio as gr
 
 from database_handler import MongoDBHandler
+from web_interface.button_calls.button_add_rule import click_add_rule
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
 from web_interface.button_calls.button_next_closest_sample import click_next_closest_sample
 from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
@@ -120,7 +121,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         label="Select SVG to display"
                     )
                     with gr.Row():
-
                         analyze_button = gr.Button("Analyze SVG")
                         batch_analyse_button = gr.Button("Analyze all Samples")
 
@@ -166,7 +166,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             crop_svg_dropdown = gr.Dropdown(
                 choices=[str(sid) for sid in db_handler.list_svg_ids()],
                 label="Select SVG to display",
-                interactive = True
+                interactive=True
             )
 
             crop_start = gr.Slider(
@@ -199,6 +199,37 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     label="Cropped Path Preview"
                 )
 
+        with gr.Tab("Synonym Rules"):
+            gr.Markdown("### Synonym Rules")
+
+            # Add rule section
+            with gr.Row():
+                name_input = gr.Textbox(
+                    label="Sample name",
+                    placeholder="e.g. Drag.33",
+                    scale=2
+                )
+                synonym_input = gr.Textbox(
+                    label="Synonym",
+                    placeholder="e.g. Nb.9",
+                    scale=2
+                )
+                add_button = gr.Button("Add", scale=1)
+
+            # Table section
+            synonym_table = gr.Dataframe(
+                headers=["Name", "Synonym", "Created at"],
+                datatype=["str", "str", "str"],
+                row_count=5,
+                col_count=(3, "fixed"),
+                label="Existing Rules",
+                interactive=False
+            )
+
+            # Delete section
+            with gr.Row():
+                delete_button = gr.Button("Delete selected rule", variant="stop")
+                selected_row = gr.State()  # placeholder for later logic
 
     # Button logic:
     state_svg_type_sample = gr.State("sample")
@@ -254,7 +285,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     next_sample_button.click(
         fn=click_next_closest_sample,
-        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state,
+                closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,
@@ -270,7 +302,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     previous_sample_button.click(
         fn=click_previous_closest_sample,
-        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state,
+                closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,  # svg_html
@@ -332,3 +365,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[save_status]
     )
 
+    add_button.click(
+        fn=click_add_rule,
+        inputs=[name_input, synonym_input],
+        outputs=synonym_table
+    )
