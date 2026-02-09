@@ -1,8 +1,9 @@
 import gradio as gr
 
 from database_handler import MongoDBHandler
-from web_interface.button_calls.button_add_rule import click_add_rule
+from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
+from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_next_closest_sample import click_next_closest_sample
 from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
@@ -218,22 +219,30 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
             # Table section
             synonym_table = gr.Dataframe(
-                headers=["Name", "Synonym", "Created at"],
-                datatype=["str", "str", "str"],
-                row_count=5,
-                col_count=(3, "fixed"),
+                headers=["#", "Name", "Synonym", "Created at"],  # added "#"
+                datatype=["number", "str", "str", "str"],
+                row_count=0,
+                col_count=(4, "fixed"),
                 label="Existing Rules",
                 interactive=False
             )
 
             # Delete section
+            selected_label = gr.Markdown("**Selected rule:** none")
             with gr.Row():
                 delete_button = gr.Button("Delete selected rule", variant="stop")
-                selected_row = gr.State()  # placeholder for later logic
+            selected_row = gr.State(None)
+            rule_ids = gr.State([])
 
     # Button logic:
     state_svg_type_sample = gr.State("sample")
     state_svg_type_template = gr.State("template")
+
+    # On load of gradio
+    demo.load(
+        fn=lambda: load_rules(),
+        outputs=[synonym_table, rule_ids]
+    )
 
     # svg upload
     button_svg_upload.click(
@@ -368,5 +377,19 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     add_button.click(
         fn=click_add_rule,
         inputs=[name_input, synonym_input],
-        outputs=synonym_table
+        outputs=[synonym_table, rule_ids]
+    )
+
+    delete_button.click(
+        fn=click_delete_rule,
+        inputs=[selected_row, rule_ids],
+        outputs=[synonym_table, rule_ids, selected_row, selected_label]
+    )
+
+    def select_on_row(evt: gr.SelectData):
+        return evt.index[0], f"**Selected rule:** row {evt.index[0] + 1}"
+
+    synonym_table.select(
+        fn=select_on_row,
+        outputs=[selected_row, selected_label]
     )
