@@ -2,7 +2,8 @@ from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display, remove_svg_fill
 from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_items, \
     find_enhanced_closest_curvature, compute_curvature_for_one_item
-
+import numpy as np
+from analysis.icp import plot_icp_overlap, find_icp_closest_matches
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
                       smooth_factor, smooth_window, n_samples):
@@ -60,17 +61,41 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         doc = db_handler.collection.find_one({"sample_id": sample_id})  # Reload doc after update
 
     # get all plots of current sample
-    curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
+    if distance_calculation != "ICP":
+        curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
+    else:
+        curvature_plot_img = None
+        curvature_color_img = None
+        angle_plot_img = None
+        status_msg = "ICP analysis completed"
     analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
     compute_status = compute_curvature_for_all_items(analysis_config)
 
     # Find close matches. Recalculate them if curvature data was recalculated and close matches are outdated.
     # Otherwise, load the closest match from the DB
-    if not doc or not doc.get("closest_matches_valid", False):
-        closest_id, distance, closest_msg = find_enhanced_closest_curvature(analysis_config)
+    if distance_calculation == "ICP":
+        matches = find_icp_closest_matches(
+            analysis_config,
+            top_k=5
+        )
+
+        if not matches:
+            closest_id = None
+            distance = None
+            closest_matches_list = []
+        else:
+            closest_id = matches[0]["id"]
+            distance = matches[0]["distance"]
+            closest_matches_list = matches
+
     else:
-        closest_id = doc["closest_matches"][0]["id"]
-        distance = doc["closest_matches"][0]["distance"]
+        if not doc or not doc.get("closest_matches_valid", False):
+            closest_id, distance, _ = find_enhanced_closest_curvature(analysis_config)
+        else:
+            closest_id = doc["closest_matches"][0]["id"]
+            distance = doc["closest_matches"][0]["distance"]
+
+        closest_matches_list = db_handler.get_closest_matches(sample_id)
 
     # if there was no error and an id was found
     if closest_id is not None:
@@ -86,10 +111,36 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_svg_html = format_svg_for_display(closest_svg_no_fill)
 
         # Load curvature data of closest match and generate plots
-        analysis_config["sample_id"] = closest_id
-        closest_plot_img, closest_color_img, closest_angle_img, _ = generate_all_plots(analysis_config)
-        closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
-        analysis_config["sample_id"] = sample_id  # reset sample id
+        if distance_calculation != "ICP":
+            analysis_config["sample_id"] = closest_id
+            closest_plot_img, closest_color_img, closest_angle_img, _ = generate_all_plots(analysis_config)
+            closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
+            analysis_config["sample_id"] = sample_id  # reset sample id
+        else:
+            # target comes from svg_raw
+            db_handler.use_collection("svg_raw")
+            target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+
+            # reference comes from svg_template_types
+            db_handler.use_collection("svg_template_types")
+            ref_doc = db_handler.collection.find_one({"sample_id": closest_id})
+
+            target_pts = np.array(target_doc["icp_data"]["outline_points"])
+            ref_pts = np.array(ref_doc["icp_data"]["outline_points"])
+
+            aligned_target_pts = np.array(matches[0]["aligned_target"])
+
+            overlap_img = plot_icp_overlap(
+                target_pts,
+                aligned_target_pts,
+                ref_pts
+            )
+
+            closest_plot_img = overlap_img
+            closest_color_img = None
+            closest_angle_img = None
+
+            closest_id_text = f"Closest match (ICP): {closest_id} (distance={distance:.4f})"
     else:
         closest_svg_html = "<p>No closest match found</p>"
         closest_plot_img = None
@@ -101,7 +152,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     db_handler.use_collection("svg_raw")
     sample_type = db_handler.get_sample_type(sample_id)
     # Load the full list of closest matches from DB
-    closest_matches_list = db_handler.get_closest_matches(sample_id)
+    if distance_calculation != "ICP":
+        closest_matches_list = db_handler.get_closest_matches(sample_id)
 
     db_handler.use_collection("svg_template_types")
     closest_type = db_handler.get_sample_type(closest_id)
@@ -111,6 +163,15 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Combine status messages
     final_status_message = f"{compute_status}\n{status_msg}"
+
+    if distance_calculation == "ICP" and closest_id is not None:
+        # hide ALL curvature plots (target + closest)
+        curvature_plot_img = None
+        curvature_color_img = None
+        angle_plot_img = None
+
+        closest_color_img = None
+        closest_angle_img = None
 
     # Return all outputs
     return (
