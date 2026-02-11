@@ -25,6 +25,11 @@ def prepare_icp_geometry_from_svg_string(svg_string, n_points):
     pts -= pts.mean(axis=0)
 
     avg_width = compute_average_width(pts)
+    if avg_width is None or avg_width == 0:
+        raise ValueError("Invalid average width")
+
+    # width normalization
+    pts /= avg_width
 
     return pts, avg_width
 
@@ -57,14 +62,67 @@ def compute_centerline(pts, slice_frac=0.5, tol=0.03):
 
 def compute_average_width(pts):
     seg = compute_centerline(pts)
-    if seg is None:
-        return None
-    return float(np.linalg.norm(seg[1] - seg[0]))
+    if seg is not None:
+        width = float(np.linalg.norm(seg[1] - seg[0]))
+        if width > 0:
+            return width
+
+    # --- fallback: PCA-based global width ---
+    X = pts - pts.mean(axis=0)
+    _, S, _ = np.linalg.svd(X, full_matrices=False)
+
+    # second singular value ≈ half-width scale
+    fallback_width = 2.0 * S[1] / np.sqrt(len(pts))
+
+    if fallback_width > 0:
+        return float(fallback_width)
+
+    return None
+
+
+def rail_aware_correspondences(src, dst):
+    """
+    Compute ICP correspondences where:
+    - left src points only match left dst points
+    - right src points only match right dst points
+    """
+    src_w = signed_width_coordinate(src)
+    dst_w = signed_width_coordinate(dst)
+
+    src_pos = src[src_w >= 0]
+    src_neg = src[src_w < 0]
+
+    dst_pos = dst[dst_w >= 0]
+    dst_neg = dst[dst_w < 0]
+
+    matched_src = []
+    matched_dst = []
+
+    if len(src_pos) > 0 and len(dst_pos) > 0:
+        tree_p = cKDTree(dst_pos)
+        _, idx_p = tree_p.query(src_pos)
+        matched_src.append(src_pos)
+        matched_dst.append(dst_pos[idx_p])
+
+    if len(src_neg) > 0 and len(dst_neg) > 0:
+        tree_n = cKDTree(dst_neg)
+        _, idx_n = tree_n.query(src_neg)
+        matched_src.append(src_neg)
+        matched_dst.append(dst_neg[idx_n])
+
+    if not matched_src:
+        return None, None
+
+    return (
+        np.vstack(matched_src),
+        np.vstack(matched_dst)
+    )
+
 
 def run_icp(source_pts, target_pts,
             iters=30,
             max_total_deg=2.0,
-            max_scale_step=0.02):
+            max_scale_step=0.002):
 
     src = source_pts.copy()
     dst = target_pts.copy()
@@ -78,15 +136,15 @@ def run_icp(source_pts, target_pts,
     best_err = np.inf
 
     for _ in range(iters):
-        tree = cKDTree(dst)
-        _, idx = tree.query(src)
-        matched = dst[idx]
+        matched_src, matched_dst = rail_aware_correspondences(src, dst)
+        if matched_src is None:
+            break
 
-        mu_src = src.mean(0)
-        mu_dst = matched.mean(0)
+        mu_src = matched_src.mean(0)
+        mu_dst = matched_dst.mean(0)
 
-        X = src - mu_src
-        Y = matched - mu_dst
+        X = matched_src - mu_src
+        Y = matched_dst - mu_dst
 
         U, S, Vt = np.linalg.svd(X.T @ Y)
         R = Vt.T @ U.T
@@ -112,7 +170,7 @@ def run_icp(source_pts, target_pts,
         t = mu_dst - scale * (R_limited @ mu_src)
         src = scale * (R_limited @ src.T).T + t
 
-        err = np.mean(np.linalg.norm(src - matched, axis=1))
+        err = np.mean(np.linalg.norm(matched_src - matched_dst, axis=1))
         if err < best_err - 1e-6:
             best_err = err
         else:
@@ -137,16 +195,60 @@ def signed_width_coordinate(pts):
 
     return X @ width_dir
 
-"""def icp_score(reference_pts, aligned_target_pts, top_percent=0.2):
-    Top-percent nearest-neighbor error (lower is better)
+def split_by_rail(pts, ref_pts_for_sign):
+    """
+    Split pts into left/right rails using signed width
+    computed from ref_pts_for_sign PCA frame.
+    """
+    w = signed_width_coordinate(ref_pts_for_sign)
+    sign = np.sign(w.mean()) if np.any(w != 0) else 1.0
+
+    pts_w = signed_width_coordinate(pts)
+
+    left = pts[pts_w * sign < 0]
+    right = pts[pts_w * sign >= 0]
+
+    return left, right
+
+
+def top_percent_nn_matches(reference_pts, aligned_target_pts, top_percent):
+    """
+    Returns:
+    - top reference points
+    - their nearest neighbors in the aligned target
+    """
     y = reference_pts[:, 1]
     cutoff = np.percentile(y, top_percent * 100)
-
     ref_top = reference_pts[y <= cutoff]
-    tree = cKDTree(aligned_target_pts)
-    dists, _ = tree.query(ref_top)
 
-    return float(np.mean(dists))"""
+    if len(ref_top) == 0:
+        return None, None
+
+    tree = cKDTree(aligned_target_pts)
+    _, idx = tree.query(ref_top)
+    tgt_nn = aligned_target_pts[idx]
+
+    return ref_top, tgt_nn
+
+def same_height_distance(src_pts, dst_pts):
+    """
+    For each src point, find the dst point with closest Y value
+    and return horizontal (X) distance.
+    """
+    if len(src_pts) == 0 or len(dst_pts) == 0:
+        return None
+
+    dst_y = dst_pts[:, 1]
+
+    dists = []
+
+    for p in src_pts:
+        y = p[1]
+        idx = np.argmin(np.abs(dst_y - y))
+        dx = np.linalg.norm(p - dst_pts[idx])
+        dists.append(dx)
+
+    return np.array(dists)
 
 def icp_score(reference_pts, aligned_target_pts, top_percent=0.1):
     """
@@ -183,14 +285,15 @@ def icp_score(reference_pts, aligned_target_pts, top_percent=0.1):
         dists = []
 
         if len(src_pos) > 0 and len(dst_pos) > 0:
-            tree_p = cKDTree(dst_pos)
-            d_p, _ = tree_p.query(src_pos)
-            dists.append(d_p)
+            d_p = same_height_distance(src_pos, dst_pos)
+            if d_p is not None:
+                dists.append(d_p)
 
         if len(src_neg) > 0 and len(dst_neg) > 0:
-            tree_n = cKDTree(dst_neg)
-            d_n, _ = tree_n.query(src_neg)
-            dists.append(d_n)
+            d_n = same_height_distance(src_neg, dst_neg)
+            if d_n is not None:
+                dists.append(d_n)
+
 
         if not dists:
             return None
@@ -243,11 +346,12 @@ def icp_score(reference_pts, aligned_target_pts, top_percent=0.1):
     alpha = 2.0
     return base_error + alpha * asym_penalty
 
+
 def find_icp_matches(
     target_pts,
     reference_dict,
     icp_params,
-    top_k=5
+    top_k=20
 ):
     """
     reference_dict: { sample_id: reference_pts }
@@ -276,18 +380,72 @@ def find_icp_matches(
     ]
 
 
-def plot_icp_overlap(target_pts, aligned_target_pts, reference_pts):
+def same_height_matches(src_pts, dst_pts):
     """
-    Blue = reference
+    For each src point, return the dst point with closest Y.
+    """
+    if len(src_pts) == 0 or len(dst_pts) == 0:
+        return None
+
+    dst_y = dst_pts[:, 1]
+    matches = []
+
+    for p in src_pts:
+        idx = np.argmin(np.abs(dst_y - p[1]))
+        matches.append(dst_pts[idx])
+
+    return np.array(matches)
+
+def plot_icp_overlap(
+    target_pts,
+    aligned_target_pts,
+    reference_pts,
+    top_percent=0.2
+):
+    """
+    Blue  = reference
     Orange = target (aligned)
     """
     fig, ax = plt.subplots(figsize=(5, 5))
 
-    ax.scatter(reference_pts[:, 0], reference_pts[:, 1],
-               s=6, color="blue", label="Reference")
+    # --- scatter outlines ---
+    ax.scatter(
+        reference_pts[:, 0],
+        reference_pts[:, 1],
+        s=6,
+        color="blue",
+        label="Reference"
+    )
 
-    ax.scatter(aligned_target_pts[:, 0], aligned_target_pts[:, 1],
-               s=6, color="orange", label="Target (aligned)")
+    ax.scatter(
+        aligned_target_pts[:, 0],
+        aligned_target_pts[:, 1],
+        s=6,
+        color="orange",
+        label="Target (aligned)"
+    )
+    
+    # --- average width segments ---
+    ref_seg = compute_centerline(reference_pts)
+    tgt_seg = compute_centerline(aligned_target_pts)
+
+    if ref_seg is not None:
+        ax.plot(
+            ref_seg[:, 0],
+            ref_seg[:, 1],
+            color="green",
+            linewidth=3,
+            label="Reference avg width"
+        )
+
+    if tgt_seg is not None:
+        ax.plot(
+            tgt_seg[:, 0],
+            tgt_seg[:, 1],
+            color="red",
+            linewidth=3,
+            label="Target avg width"
+        )
 
     ax.set_aspect("equal", adjustable="box")
     ax.invert_yaxis()
@@ -318,8 +476,10 @@ def precompute_icp_for_all_references(db_handler, n_points):
                 continue
 
         try:
+            svg_string = doc.get("cropped_svg", doc["cleaned_svg"])
+
             pts, avg_width = prepare_icp_geometry_from_svg_string(
-                doc["cleaned_svg"],
+                svg_string,
                 n_points
             )
 
@@ -348,13 +508,15 @@ def ensure_icp_geometry(doc, db_handler, n_points):
     """
     function to get info for icp method
     """
-    if "icp_data" in doc:
+    if doc.get("icp_data"):
         settings = doc["icp_data"].get("settings", {})
         if settings.get("n_points") == n_points:
             return doc["icp_data"]
     
+    svg_string = doc.get("cropped_svg", doc["cleaned_svg"])
+
     pts, avg_width = prepare_icp_geometry_from_svg_string(
-        doc["cleaned_svg"],
+        svg_string,
         n_points
     )
 
@@ -376,12 +538,12 @@ def ensure_icp_geometry(doc, db_handler, n_points):
     return icp_data
 
 
-def find_icp_closest_matches(analysis_config, top_k=5):
+def find_icp_closest_matches(analysis_config, top_k=20):
     db_handler = analysis_config["db_handler"]
     sample_id = analysis_config["sample_id"]
 
-    n_target = analysis_config.get("icp_n_target", 100)
-    n_ref = analysis_config.get("icp_n_reference", 300)
+    n_target = analysis_config.get("icp_n_target", 300)
+    n_ref = analysis_config.get("icp_n_reference", 500)
 
     icp_params = {
         "iters": analysis_config.get("icp_iters", 30),

@@ -76,7 +76,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     if distance_calculation == "ICP":
         matches = find_icp_closest_matches(
             analysis_config,
-            top_k=5
+            top_k=20
         )
 
         if not matches:
@@ -133,7 +133,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             overlap_img = plot_icp_overlap(
                 target_pts,
                 aligned_target_pts,
-                ref_pts
+                ref_pts,
+                top_percent=analysis_config.get("icp_top_percent", 0.2)
             )
 
             closest_plot_img = overlap_img

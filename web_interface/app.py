@@ -99,7 +99,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                                                      label="Distanzberechnung Datenpunkte")
                 distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
                                                             "Correlation Distance", "dynamic time warping",
-                                                            "integral difference"],
+                                                            "integral difference", "ICP"],
                                                    label="Distanzberechnung Datensatz")
                 smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
                                                      label="Glättungsmethode")
