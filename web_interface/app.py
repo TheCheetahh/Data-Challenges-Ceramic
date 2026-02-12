@@ -89,6 +89,45 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             with gr.Row():
                 status_output_text = gr.Textbox(label="Status", interactive=False, lines=8)
 
+        with gr.Tab("Edit SVG Path"):
+            gr.Markdown("### Crop SVG Path")
+
+            crop_svg_dropdown = gr.Dropdown(
+                choices=[str(sid) for sid in db_handler.list_svg_ids()],
+                label="Select SVG to display",
+                interactive=True
+            )
+
+            crop_start = gr.Slider(
+                minimum=0.0,
+                maximum=0.5,
+                value=0.0,
+                step=0.01,
+                label="Crop start",
+                interactive=True
+            )
+
+            crop_end = gr.Slider(
+                minimum=0.51,
+                maximum=1.0,
+                value=1.0,
+                step=0.01,
+                label="Crop end",
+                interactive=True
+            )
+
+            save_cropped_svg_button = gr.Button("Save cropped svg path")
+            save_status = gr.Textbox(label="Save Status", interactive=False)
+
+            with gr.Row():
+                full_svg_display = gr.HTML(
+                    label="Full SVG"
+                )
+
+                cropped_svg_display = gr.HTML(
+                    label="Cropped Path Preview"
+                )
+
         # Tab for all analysis related tasks
         with gr.Tab("Analyse files"):
             gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nAnalysiere die SVG Dateien.")
@@ -151,54 +190,15 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     )
 
                     with gr.Row():
-                        previous_sample_button = gr.Button("<-")
+                        previous_sample_button = gr.Button("←")
                         index_display = gr.Markdown("-/-", elem_id="centered_md")
-                        next_sample_button = gr.Button("->")
+                        next_sample_button = gr.Button("→")
 
                     closest_svg_output = gr.HTML(
                         value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
                     closest_curvature_plot_output = gr.Image(label="Curvature Plot")
                     closest_curvature_color_output = gr.Image(label="Curvature Color Map")
                     closest_angle_plot_output = gr.Image(label="Angle Plot")
-
-        with gr.Tab("Edit SVG Path"):
-            gr.Markdown("### Crop SVG Path")
-
-            crop_svg_dropdown = gr.Dropdown(
-                choices=[str(sid) for sid in db_handler.list_svg_ids()],
-                label="Select SVG to display",
-                interactive=True
-            )
-
-            crop_start = gr.Slider(
-                minimum=0.0,
-                maximum=0.5,
-                value=0.0,
-                step=0.01,
-                label="Crop start",
-                interactive=True
-            )
-
-            crop_end = gr.Slider(
-                minimum=0.51,
-                maximum=1.0,
-                value=1.0,
-                step=0.01,
-                label="Crop end",
-                interactive=True
-            )
-
-            save_cropped_svg_button = gr.Button("Save cropped svg path")
-            save_status = gr.Textbox(label="Save Status", interactive=False)
-
-            with gr.Row():
-                full_svg_display = gr.HTML(
-                    label="Full SVG"
-                )
-
-                cropped_svg_display = gr.HTML(
-                    label="Cropped Path Preview"
-                )
 
         with gr.Tab("Synonym Rules"):
             gr.Markdown("### Synonym Rules")
