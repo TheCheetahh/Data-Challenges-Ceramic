@@ -4,6 +4,7 @@ from scipy.spatial import cKDTree
 import io
 import matplotlib.pyplot as plt
 from PIL import Image
+from analysis.analyze_curvature import curvature_from_points
 def prepare_icp_geometry_from_svg_string(svg_string, n_points):
     """
     Parse SVG string → sampled, centered outline points + avg width
@@ -250,101 +251,7 @@ def same_height_distance(src_pts, dst_pts):
 
     return np.array(dists)
 
-def icp_score(reference_pts, aligned_target_pts, top_percent=0.1):
-    """
-    Asymmetric symmetric ICP score:
 
-    - reference → target : top `top_percent` of reference
-    - target → reference : entire target
-    - outline-aware (left/right rails)
-    """
-
-    def outline_distance(src_pts, dst_pts, use_top):
-        # --- select points ---
-        if use_top:
-            y = src_pts[:, 1]
-            cutoff = np.percentile(y, top_percent * 100)
-            src = src_pts[y <= cutoff]
-        else:
-            src = src_pts
-
-        if len(src) == 0 or len(dst_pts) == 0:
-            return None
-
-        # --- signed width ---
-        src_w = signed_width_coordinate(src)
-        dst_w = signed_width_coordinate(dst_pts)
-
-        # --- split rails ---
-        src_pos = src[src_w >= 0]
-        src_neg = src[src_w < 0]
-
-        dst_pos = dst_pts[dst_w >= 0]
-        dst_neg = dst_pts[dst_w < 0]
-
-        dists = []
-
-        if len(src_pos) > 0 and len(dst_pos) > 0:
-            d_p = same_height_distance(src_pos, dst_pos)
-            if d_p is not None:
-                dists.append(d_p)
-
-        if len(src_neg) > 0 and len(dst_neg) > 0:
-            d_n = same_height_distance(src_neg, dst_neg)
-            if d_n is not None:
-                dists.append(d_n)
-
-
-        if not dists:
-            return None
-
-        return float(np.percentile(np.concatenate(dists), 95))
-
-    # --- directional distances ---
-    ref_to_tgt = outline_distance(
-        reference_pts,
-        aligned_target_pts,
-        use_top=True
-    )
-
-    tgt_to_ref = outline_distance(
-        aligned_target_pts,
-        reference_pts,
-        use_top=False
-    )
-
-    if ref_to_tgt is None and tgt_to_ref is None:
-        return float("inf")
-
-    if ref_to_tgt is None:
-        base_error = tgt_to_ref
-    elif tgt_to_ref is None:
-        base_error = ref_to_tgt
-    else:
-        base_error = 0.5 * (ref_to_tgt + tgt_to_ref)
-
-    # --- asymmetry penalty (global, unchanged) ---
-    ref_w = signed_width_coordinate(reference_pts)
-    tgt_w = signed_width_coordinate(aligned_target_pts)
-
-    if np.any(ref_w < 0) and np.any(ref_w >= 0):
-        ref_left = np.mean(np.abs(ref_w[ref_w < 0]))
-        ref_right = np.mean(np.abs(ref_w[ref_w >= 0]))
-        ref_asym = abs(ref_left - ref_right)
-    else:
-        ref_asym = 0.0
-
-    if np.any(tgt_w < 0) and np.any(tgt_w >= 0):
-        tgt_left = np.mean(np.abs(tgt_w[tgt_w < 0]))
-        tgt_right = np.mean(np.abs(tgt_w[tgt_w >= 0]))
-        tgt_asym = abs(tgt_left - tgt_right)
-    else:
-        tgt_asym = 0.0
-
-    asym_penalty = abs(ref_asym - tgt_asym)
-
-    alpha = 2.0
-    return base_error + alpha * asym_penalty
 
 
 def find_icp_matches(
@@ -366,7 +273,7 @@ def find_icp_matches(
             max_total_deg=icp_params["max_total_deg"],
             max_scale_step=icp_params["max_scale_step"]
         )
-        score = icp_score(ref_pts, aligned, icp_params["top_percent"])
+        score = icp_score(ref_pts, aligned)
         results.append((ref_id, score, aligned))
 
     results.sort(key=lambda x: x[1])
@@ -378,6 +285,151 @@ def find_icp_matches(
         }
         for rid, score, aligned in results[:top_k]
     ]
+
+def discrete_curvature(pts):
+    """
+    Fast discrete curvature estimate.
+    Returns curvature magnitude for interior points.
+    """
+
+    if pts is None or len(pts) < 3:
+        return None
+
+    # consecutive triplets
+    p_prev = pts[:-2]
+    p_mid  = pts[1:-1]
+    p_next = pts[2:]
+
+    v1 = p_mid - p_prev
+    v2 = p_next - p_mid
+
+    # normalize to avoid scale bias
+    v1_norm = v1 / (np.linalg.norm(v1, axis=1, keepdims=True) + 1e-8)
+    v2_norm = v2 / (np.linalg.norm(v2, axis=1, keepdims=True) + 1e-8)
+
+    # curvature proxy = change in direction
+    curvature = np.linalg.norm(v2_norm - v1_norm, axis=1)
+
+    return curvature
+
+
+def icp_score(reference_pts,
+              aligned_target_pts,
+              overlap_dist_ratio=0.05):
+    """
+    Structural ICP score.
+
+    Combines:
+    - symmetric spatial distance
+    - tangent direction consistency
+    - longitudinal width profile similarity
+    - symmetric coverage penalty
+    """
+
+    if len(reference_pts) < 5 or len(aligned_target_pts) < 5:
+        return np.inf
+
+    # -----------------------------
+    # 1) Symmetric spatial distance
+    # -----------------------------
+    tree_ref = cKDTree(reference_pts)
+    d_fwd, idx_fwd = tree_ref.query(aligned_target_pts)
+
+    tree_tgt = cKDTree(aligned_target_pts)
+    d_rev, _ = tree_tgt.query(reference_pts)
+
+    spatial_error = 0.5 * (np.mean(d_fwd) + np.mean(d_rev))
+
+    # -----------------------------
+    # 2) Symmetric coverage
+    # -----------------------------
+    ref_min = reference_pts.min(axis=0)
+    ref_max = reference_pts.max(axis=0)
+    diag = np.linalg.norm(ref_max - ref_min)
+
+    overlap_thresh = overlap_dist_ratio * diag
+
+    coverage_fwd = np.mean(d_fwd < overlap_thresh)
+    coverage_rev = np.mean(d_rev < overlap_thresh)
+
+    coverage_ratio = min(coverage_fwd, coverage_rev)
+
+    if coverage_ratio < 0.1:
+        return np.inf
+
+    coverage_penalty = 5.0 * (1.0 - coverage_ratio) ** 2
+
+    # -----------------------------
+    # 3) Tangent direction error
+    # -----------------------------
+    matched_tgt = aligned_target_pts[d_fwd < overlap_thresh]
+    matched_ref = reference_pts[idx_fwd[d_fwd < overlap_thresh]]
+
+    tangent_error = 0.0
+
+    if len(matched_tgt) > 10:
+        tgt_vecs = matched_tgt[1:] - matched_tgt[:-1]
+        ref_vecs = matched_ref[1:] - matched_ref[:-1]
+
+        tgt_vecs /= np.linalg.norm(tgt_vecs, axis=1, keepdims=True) + 1e-8
+        ref_vecs /= np.linalg.norm(ref_vecs, axis=1, keepdims=True) + 1e-8
+
+        min_len = min(len(tgt_vecs), len(ref_vecs))
+
+        if min_len > 5:
+            dots = np.sum(
+                tgt_vecs[:min_len] * ref_vecs[:min_len],
+                axis=1
+            )
+            dots = np.clip(dots, -1.0, 1.0)
+            tangent_error = np.mean(np.arccos(dots))
+
+    # -----------------------------
+    # 4) Width profile error
+    # -----------------------------
+    ref_mean = reference_pts.mean(axis=0)
+    X_ref = reference_pts - ref_mean
+
+    _, _, Vt = np.linalg.svd(X_ref, full_matrices=False)
+    main_dir = Vt[0]
+    width_dir = np.array([-main_dir[1], main_dir[0]])
+
+    ref_s = (reference_pts - ref_mean) @ main_dir
+    tgt_s = (aligned_target_pts - ref_mean) @ main_dir
+
+    ref_w = (reference_pts - ref_mean) @ width_dir
+    tgt_w = (aligned_target_pts - ref_mean) @ width_dir
+
+    bins = np.linspace(ref_s.min(), ref_s.max(), 20)
+
+    width_errors = []
+
+    for i in range(len(bins) - 1):
+        mask_ref = (ref_s >= bins[i]) & (ref_s < bins[i+1])
+        mask_tgt = (tgt_s >= bins[i]) & (tgt_s < bins[i+1])
+
+        if np.sum(mask_ref) > 5 and np.sum(mask_tgt) > 5:
+            w_ref = np.max(ref_w[mask_ref]) - np.min(ref_w[mask_ref])
+            w_tgt = np.max(tgt_w[mask_tgt]) - np.min(tgt_w[mask_tgt])
+            width_errors.append(abs(w_ref - w_tgt))
+
+    width_profile_error = np.mean(width_errors) if width_errors else 0.0
+
+    # -----------------------------
+    # Final weighted score
+    # -----------------------------
+    w_spatial = 1.0
+    w_tangent = 1.0
+    w_width   = 1.5
+
+    score = (
+        w_spatial * spatial_error
+        + w_tangent * tangent_error
+        + w_width * width_profile_error
+        + coverage_penalty
+    )
+
+    return float(score)
 
 
 def same_height_matches(src_pts, dst_pts):
