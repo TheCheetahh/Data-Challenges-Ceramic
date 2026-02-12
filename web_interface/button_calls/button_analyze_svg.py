@@ -191,5 +191,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_type,
         closest_matches_list,  # list of closest matches
         current_index,  # starting index is always 0
-        f"{1} / 20"
+        f"{1} / 20",
+        sample_id
     )
