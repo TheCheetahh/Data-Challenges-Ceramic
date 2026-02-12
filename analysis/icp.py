@@ -273,29 +273,30 @@ def find_icp_matches(
             max_total_deg=icp_params["max_total_deg"],
             max_scale_step=icp_params["max_scale_step"]
         )
-        score = icp_score(ref_pts, aligned)
-        results.append((ref_id, score, aligned))
+        score, bbox = icp_score(ref_pts, aligned)
+        results.append((ref_id, score, aligned, bbox))
 
     results.sort(key=lambda x: x[1])
     return [
         {
             "id": rid,
             "distance": float(score),
-            "aligned_target": aligned.tolist()
+            "aligned_target": aligned.tolist(),
+            "bbox": bbox
         }
-        for rid, score, aligned in results[:top_k]
+        for rid, score, aligned, bbox in results[:top_k]
     ]
 
 def discrete_curvature(pts):
     """
-    Fast discrete curvature estimate.
-    Returns curvature magnitude for interior points.
+    Signed discrete curvature.
+    Positive = bending one way
+    Negative = bending the other way
     """
 
     if pts is None or len(pts) < 3:
         return None
 
-    # consecutive triplets
     p_prev = pts[:-2]
     p_mid  = pts[1:-1]
     p_next = pts[2:]
@@ -303,134 +304,146 @@ def discrete_curvature(pts):
     v1 = p_mid - p_prev
     v2 = p_next - p_mid
 
-    # normalize to avoid scale bias
     v1_norm = v1 / (np.linalg.norm(v1, axis=1, keepdims=True) + 1e-8)
     v2_norm = v2 / (np.linalg.norm(v2, axis=1, keepdims=True) + 1e-8)
 
-    # curvature proxy = change in direction
-    curvature = np.linalg.norm(v2_norm - v1_norm, axis=1)
+    # 2D cross product (scalar)
+    cross = v1_norm[:, 0] * v2_norm[:, 1] - v1_norm[:, 1] * v2_norm[:, 0]
+
+    # signed curvature proxy
+    curvature = cross
 
     return curvature
 
 
 def icp_score(reference_pts,
-              aligned_target_pts,
-              overlap_dist_ratio=0.05):
+              aligned_target_pts):
     """
-    Structural ICP score.
+    ICP score using:
+    - Bounding box around entire aligned target
+    - Reference cropped to that box
+    - Rail-wise curvature comparison
+    - Local spatial consistency
 
-    Combines:
-    - symmetric spatial distance
-    - tangent direction consistency
-    - longitudinal width profile similarity
-    - symmetric coverage penalty
+    Always returns:
+        (score, bbox)   or   (np.inf, None)
     """
 
-    if len(reference_pts) < 5 or len(aligned_target_pts) < 5:
-        return np.inf
+    # --------------------------------------------------
+    # Basic safety checks
+    # --------------------------------------------------
+    if len(reference_pts) < 20 or len(aligned_target_pts) < 20:
+        return np.inf, None
 
-    # -----------------------------
-    # 1) Symmetric spatial distance
-    # -----------------------------
-    tree_ref = cKDTree(reference_pts)
-    d_fwd, idx_fwd = tree_ref.query(aligned_target_pts)
+    # --------------------------------------------------
+    # 1) Bounding box around FULL aligned target
+    # --------------------------------------------------
+    bbox_min = aligned_target_pts.min(axis=0)
+    bbox_max = aligned_target_pts.max(axis=0)
 
-    tree_tgt = cKDTree(aligned_target_pts)
-    d_rev, _ = tree_tgt.query(reference_pts)
+    # Expand bounding box (scale factor)
+    expand_factor = 1.5  # try 1.3–2.0
 
-    spatial_error = 0.5 * (np.mean(d_fwd) + np.mean(d_rev))
+    width = bbox_max[0] - bbox_min[0]
+    height = bbox_max[1] - bbox_min[1]
 
-    # -----------------------------
-    # 2) Symmetric coverage
-    # -----------------------------
-    ref_min = reference_pts.min(axis=0)
-    ref_max = reference_pts.max(axis=0)
-    diag = np.linalg.norm(ref_max - ref_min)
+    expand_x = (expand_factor - 1.0) * width / 2.0
+    expand_y = (expand_factor - 1.0) * height / 2.0
 
-    overlap_thresh = overlap_dist_ratio * diag
+    bbox_min = bbox_min - np.array([expand_x, expand_y])
+    bbox_max = bbox_max + np.array([expand_x, expand_y])
 
-    coverage_fwd = np.mean(d_fwd < overlap_thresh)
-    coverage_rev = np.mean(d_rev < overlap_thresh)
 
-    coverage_ratio = min(coverage_fwd, coverage_rev)
+    def inside_bbox(points):
+        return np.all((points >= bbox_min) & (points <= bbox_max), axis=1)
 
-    if coverage_ratio < 0.1:
-        return np.inf
+    ref_box = reference_pts[inside_bbox(reference_pts)]
+    tgt_box = aligned_target_pts  # full target
 
-    coverage_penalty = 5.0 * (1.0 - coverage_ratio) ** 2
+    if len(ref_box) < 20:
+        return np.inf, None
 
-    # -----------------------------
-    # 3) Tangent direction error
-    # -----------------------------
-    matched_tgt = aligned_target_pts[d_fwd < overlap_thresh]
-    matched_ref = reference_pts[idx_fwd[d_fwd < overlap_thresh]]
+    # --------------------------------------------------
+    # 2) Split into rails
+    # --------------------------------------------------
+    ref_left, ref_right = split_by_rail(ref_box, reference_pts)
+    tgt_left, tgt_right = split_by_rail(tgt_box, aligned_target_pts)
 
-    tangent_error = 0.0
+    # --------------------------------------------------
+    # 3) Curvature comparison per rail
+    # --------------------------------------------------
+    def curvature_error(a, b):
+        if len(a) < 10 or len(b) < 10:
+            return np.inf
 
-    if len(matched_tgt) > 10:
-        tgt_vecs = matched_tgt[1:] - matched_tgt[:-1]
-        ref_vecs = matched_ref[1:] - matched_ref[:-1]
+        # ---- Direction check ----
+        dir_a = a[-1] - a[0]
+        dir_b = b[-1] - b[0]
 
-        tgt_vecs /= np.linalg.norm(tgt_vecs, axis=1, keepdims=True) + 1e-8
-        ref_vecs /= np.linalg.norm(ref_vecs, axis=1, keepdims=True) + 1e-8
+        dir_a /= (np.linalg.norm(dir_a) + 1e-8)
+        dir_b /= (np.linalg.norm(dir_b) + 1e-8)
 
-        min_len = min(len(tgt_vecs), len(ref_vecs))
+        dot = np.dot(dir_a, dir_b)
 
-        if min_len > 5:
-            dots = np.sum(
-                tgt_vecs[:min_len] * ref_vecs[:min_len],
-                axis=1
-            )
-            dots = np.clip(dots, -1.0, 1.0)
-            tangent_error = np.mean(np.arccos(dots))
+        # If pointing strongly opposite → reject
+        if dot < -0.3:
+            return np.inf
 
-    # -----------------------------
-    # 4) Width profile error
-    # -----------------------------
-    ref_mean = reference_pts.mean(axis=0)
-    X_ref = reference_pts - ref_mean
+        curv_a = discrete_curvature(a)
+        curv_b = discrete_curvature(b)
 
-    _, _, Vt = np.linalg.svd(X_ref, full_matrices=False)
-    main_dir = Vt[0]
-    width_dir = np.array([-main_dir[1], main_dir[0]])
+        if curv_a is None or curv_b is None:
+            return np.inf
 
-    ref_s = (reference_pts - ref_mean) @ main_dir
-    tgt_s = (aligned_target_pts - ref_mean) @ main_dir
+        n = min(len(curv_a), len(curv_b))
+        if n < 10:
+            return np.inf
 
-    ref_w = (reference_pts - ref_mean) @ width_dir
-    tgt_w = (aligned_target_pts - ref_mean) @ width_dir
+        # ---- Compare forward ----
+        curv_b_forward = curv_b[:n]
+        curv_b_backward = curv_b[:n][::-1]
 
-    bins = np.linspace(ref_s.min(), ref_s.max(), 20)
+        err_forward = np.mean((curv_a[:n] - curv_b_forward) ** 2)
+        err_backward = np.mean((curv_a[:n] - curv_b_backward) ** 2)
 
-    width_errors = []
+        best_err = min(err_forward, err_backward)
 
-    for i in range(len(bins) - 1):
-        mask_ref = (ref_s >= bins[i]) & (ref_s < bins[i+1])
-        mask_tgt = (tgt_s >= bins[i]) & (tgt_s < bins[i+1])
+        # ---- Penalize opposite curvature sign ----
+        sign_corr = np.mean(np.sign(curv_a[:n]) * np.sign(curv_b_forward))
 
-        if np.sum(mask_ref) > 5 and np.sum(mask_tgt) > 5:
-            w_ref = np.max(ref_w[mask_ref]) - np.min(ref_w[mask_ref])
-            w_tgt = np.max(tgt_w[mask_tgt]) - np.min(tgt_w[mask_tgt])
-            width_errors.append(abs(w_ref - w_tgt))
+        if sign_corr < -0.3:
+            return np.inf
 
-    width_profile_error = np.mean(width_errors) if width_errors else 0.0
+        return best_err
 
-    # -----------------------------
+
+    err_left = curvature_error(ref_left, tgt_left)
+    err_right = curvature_error(ref_right, tgt_right)
+
+    if not np.isfinite(err_left) or not np.isfinite(err_right):
+        return np.inf, None
+
+    curvature_term = 0.5 * (err_left + err_right)
+
+    # --------------------------------------------------
+    # 4) Spatial term (local consistency)
+    # --------------------------------------------------
+    tree_ref = cKDTree(ref_box)
+    dists, _ = tree_ref.query(tgt_box)
+    spatial_term = np.mean(dists)
+
+    # --------------------------------------------------
     # Final weighted score
-    # -----------------------------
+    # --------------------------------------------------
     w_spatial = 1.0
-    w_tangent = 1.0
-    w_width   = 1.5
+    w_curv = 2.0
 
     score = (
-        w_spatial * spatial_error
-        + w_tangent * tangent_error
-        + w_width * width_profile_error
-        + coverage_penalty
+        w_spatial * spatial_term +
+        w_curv * curvature_term
     )
 
-    return float(score)
-
+    return float(score), (bbox_min, bbox_max)
 
 def same_height_matches(src_pts, dst_pts):
     """
@@ -452,53 +465,131 @@ def plot_icp_overlap(
     target_pts,
     aligned_target_pts,
     reference_pts,
-    top_percent=0.2
+    bbox=None
 ):
     """
-    Blue  = reference
-    Orange = target (aligned)
+    Shows:
+    - Full reference (light gray)
+    - Reference inside bbox split into left/right rails
+    - Full aligned target split into rails
+    - Bounding box
+    - Average width lines
     """
-    fig, ax = plt.subplots(figsize=(5, 5))
 
-    # --- scatter outlines ---
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    # --------------------------------------------------
+    # 1) Split full reference rails (for consistent sign)
+    # --------------------------------------------------
+    ref_left_full, ref_right_full = split_by_rail(reference_pts, reference_pts)
+
+    # --------------------------------------------------
+    # 2) Determine bbox mask
+    # --------------------------------------------------
+    if bbox is not None:
+        bbox_min, bbox_max = bbox
+        ref_mask = np.all(
+            (reference_pts >= bbox_min) &
+            (reference_pts <= bbox_max),
+            axis=1
+        )
+    else:
+        ref_mask = np.ones(len(reference_pts), dtype=bool)
+
+    # --------------------------------------------------
+    # 3) Plot full reference faint
+    # --------------------------------------------------
     ax.scatter(
         reference_pts[:, 0],
         reference_pts[:, 1],
-        s=6,
-        color="blue",
-        label="Reference"
+        s=6, color="lightgray",
+        label="Reference (full)"
     )
 
-    ax.scatter(
-        aligned_target_pts[:, 0],
-        aligned_target_pts[:, 1],
-        s=6,
-        color="orange",
-        label="Target (aligned)"
-    )
-    
-    # --- average width segments ---
+    # --------------------------------------------------
+    # 4) Highlight reference rails INSIDE bbox
+    # --------------------------------------------------
+    if bbox is not None:
+
+        # split only the points inside bbox
+        ref_box = reference_pts[ref_mask]
+        ref_left_box, ref_right_box = split_by_rail(ref_box, reference_pts)
+
+        if len(ref_left_box) > 0:
+            ax.scatter(
+                ref_left_box[:, 0], ref_left_box[:, 1],
+                s=10, color="blue",
+                label="Reference Left (used)"
+            )
+
+        if len(ref_right_box) > 0:
+            ax.scatter(
+                ref_right_box[:, 0], ref_right_box[:, 1],
+                s=10, color="cyan",
+                label="Reference Right (used)"
+            )
+
+    # --------------------------------------------------
+    # 5) Split and plot target rails
+    # --------------------------------------------------
+    tgt_left, tgt_right = split_by_rail(aligned_target_pts, aligned_target_pts)
+
+    if len(tgt_left) > 0:
+        ax.scatter(
+            tgt_left[:, 0], tgt_left[:, 1],
+            s=8, color="orange",
+            label="Target Left"
+        )
+
+    if len(tgt_right) > 0:
+        ax.scatter(
+            tgt_right[:, 0], tgt_right[:, 1],
+            s=8, color="red",
+            label="Target Right"
+        )
+
+    # --------------------------------------------------
+    # 6) Draw bounding box
+    # --------------------------------------------------
+    if bbox is not None:
+        rect_x = [
+            bbox_min[0], bbox_max[0],
+            bbox_max[0], bbox_min[0],
+            bbox_min[0]
+        ]
+        rect_y = [
+            bbox_min[1], bbox_min[1],
+            bbox_max[1], bbox_max[1],
+            bbox_min[1]
+        ]
+
+        ax.plot(
+            rect_x, rect_y,
+            color="purple",
+            linestyle="--",
+            linewidth=2,
+            label="Scoring BBox"
+        )
+
+    # --------------------------------------------------
+    # 7) Average width lines
+    # --------------------------------------------------
     ref_seg = compute_centerline(reference_pts)
     tgt_seg = compute_centerline(aligned_target_pts)
 
     if ref_seg is not None:
-        ax.plot(
-            ref_seg[:, 0],
-            ref_seg[:, 1],
-            color="green",
-            linewidth=3,
-            label="Reference avg width"
-        )
+        ax.plot(ref_seg[:, 0], ref_seg[:, 1],
+                color="green", linewidth=3,
+                label="Reference avg width")
 
     if tgt_seg is not None:
-        ax.plot(
-            tgt_seg[:, 0],
-            tgt_seg[:, 1],
-            color="red",
-            linewidth=3,
-            label="Target avg width"
-        )
+        ax.plot(tgt_seg[:, 0], tgt_seg[:, 1],
+                color="black", linewidth=3,
+                label="Target avg width")
 
+    # --------------------------------------------------
+    # 8) Final formatting
+    # --------------------------------------------------
     ax.set_aspect("equal", adjustable="box")
     ax.invert_yaxis()
     ax.legend(loc="best")
@@ -600,7 +691,7 @@ def find_icp_closest_matches(analysis_config, top_k=20):
     icp_params = {
         "iters": analysis_config.get("icp_iters", 30),
         "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
-        "max_scale_step": analysis_config.get("icp_max_scale", 0.02),
+        "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
         "top_percent": analysis_config.get("icp_top_percent", 0.2)
     }
 

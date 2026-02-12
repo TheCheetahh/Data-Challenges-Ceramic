@@ -129,12 +129,13 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             ref_pts = np.array(ref_doc["icp_data"]["outline_points"])
 
             aligned_target_pts = np.array(matches[0]["aligned_target"])
+            bbox = matches[0]["bbox"]
 
             overlap_img = plot_icp_overlap(
                 target_pts,
                 aligned_target_pts,
                 ref_pts,
-                top_percent=analysis_config.get("icp_top_percent", 0.2)
+                bbox=matches[0]["bbox"]
             )
 
             closest_plot_img = overlap_img
