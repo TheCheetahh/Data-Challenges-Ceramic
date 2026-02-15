@@ -356,6 +356,24 @@ def discrete_curvature(pts):
 
     return curvature
 
+def discrete_direction(pts):
+    """
+    Tangent direction angles (radians) along ordered rail points.
+    Returned length = len(pts) - 1
+    """
+    if pts is None or len(pts) < 2:
+        return None
+
+    diffs = np.diff(pts, axis=0)
+    angles = np.arctan2(diffs[:, 1], diffs[:, 0])
+    return angles
+
+def mean_angular_error(a, b):
+    """
+    Mean absolute wrapped angular difference (radians).
+    """
+    delta = (a - b + np.pi) % (2 * np.pi) - np.pi
+    return np.mean(np.abs(delta))
 
 def extract_tip_region(pts, percent=0.15):
     """
@@ -506,7 +524,6 @@ def icp_score(reference_pts,
     - Bounding box around entire aligned target
     - Reference cropped to that box
     - Rail-wise curvature comparison
-    - Local spatial consistency
 
     Always returns:
         (score, bbox)   or   (np.inf, None)
@@ -586,6 +603,20 @@ def icp_score(reference_pts,
     ref_box = reference_pts[inside_bbox(reference_pts)]
     tgt_box = aligned_target_pts  # full target
 
+    # --------------------------------------------------
+    # Reject if reference contains multiple rails in bbox
+    # --------------------------------------------------
+    ref_rail_count = count_rail_clusters_1d(
+        ref_box,
+        gap_ratio=0.15,
+        min_cluster_size=20
+    )
+
+    if ref_rail_count != 1:
+        print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
+        # Reference bbox contains multiple (or zero) rails
+        return np.inf, None
+
     if len(ref_box) < 20:
         print(f"[{ref_id}] Reject: ref_box too small:", len(ref_box))
         return np.inf, None
@@ -593,115 +624,55 @@ def icp_score(reference_pts,
     # --------------------------------------------------
     # 2) Single-rail assumption inside bbox
     # --------------------------------------------------
-    ref_rail = ref_box
     tgt_rail = tgt_box
-    line20_pts, line20_ids = make_points_on_target_rail(tgt_rail)
-    # --------------------------------------------------
-    # 3) Curvature comparison per rail
-    # --------------------------------------------------
-    def curvature_error(a, b):
-        if len(a) < 10 or len(b) < 10:
-            print("Reject: too few points", len(a), len(b))
-            return np.inf
+    ref_rail = ref_box
 
-        # ---- Direction check ----
-        dir_a = a[-1] - a[0]
-        dir_b = b[-1] - b[0]
-
-        dir_a /= (np.linalg.norm(dir_a) + 1e-8)
-        dir_b /= (np.linalg.norm(dir_b) + 1e-8)
-
-        dot = np.dot(dir_a, dir_b)
-
-        curv_a = discrete_curvature(a)
-        curv_b = discrete_curvature(b)
-
-        if curv_a is None or curv_b is None:
-            print("Reject: curvature None")
-            return np.inf
-
-        n = min(len(curv_a), len(curv_b))
-        if n < 10:
-            return np.inf
-
-        # ---- Compare forward ----
-        curv_b_forward = curv_b[:n]
-        curv_b_backward = curv_b[:n][::-1]
-
-        err_forward = np.mean((curv_a[:n] - curv_b_forward) ** 2)
-        err_backward = np.mean((curv_a[:n] - curv_b_backward) ** 2)
-
-        best_err = min(err_forward, err_backward)
-
-        # ---- Penalize opposite curvature sign ----
-        sign_corr = np.mean(np.sign(curv_a[:n]) * np.sign(curv_b_forward))
-
-        if sign_corr < -0.3:
-            print(f"[{ref_id}] Reject: sign_corr =", sign_corr)
-            return np.inf
-
-        return best_err
-
-
-    curvature_term = curvature_error(ref_rail, tgt_rail)
-
-    if not np.isfinite(curvature_term):
-        return np.inf, None
-
-    # --------------------------------------------------
-    # 3.5) TIP ALIGNMENT TERM (critical)
-    # --------------------------------------------------
-
-    ref_tip = extract_tip_region(ref_box, percent=0.15)
-    tgt_tip = extract_tip_region(tgt_box, percent=0.15)
-
-    if ref_tip is None or tgt_tip is None:
-        return np.inf, None
-
-    # nearest neighbor matching within tip region
-    tree_tip = cKDTree(ref_tip)
-    tip_dists, _ = tree_tip.query(tgt_tip)
-
-    tip_spatial = np.mean(tip_dists)
-
-    # curvature at tip (strong structural check)
-    curv_ref_tip = discrete_curvature(ref_tip)
-    curv_tgt_tip = discrete_curvature(tgt_tip)
-
-    if curv_ref_tip is None or curv_tgt_tip is None:
-        return np.inf, None
-
-    n_tip = min(len(curv_ref_tip), len(curv_tgt_tip))
-
-    if n_tip < 5:
-        return np.inf, None
-
-    tip_curv_err = np.mean(
-        (curv_ref_tip[:n_tip] - curv_tgt_tip[:n_tip]) ** 2
+    tgt_line_pts, _ = make_points_on_target_rail(tgt_rail, n_points=100)
+    ref_line_pts, _ = make_points_on_reference_rail(
+        reference_pts,
+        bbox_poly,
+        n_points=100
     )
 
-    tip_term = tip_spatial + 3.0 * tip_curv_err
+    if tgt_line_pts is None or ref_line_pts is None:
+        return np.inf, None
+    # --------------------------------------------------
+    # 3) Curvature + direction rail similarity score
+    # --------------------------------------------------
 
-    # --------------------------------------------------
-    # 4) Spatial term (local consistency)
-    # --------------------------------------------------
-    tree_ref = cKDTree(ref_box)
-    dists, _ = tree_ref.query(tgt_box)
-    spatial_term = np.mean(dists)
+    # --- curvature ---
+    curv_tgt = discrete_curvature(tgt_line_pts)
+    curv_ref = discrete_curvature(ref_line_pts)
 
-    # --------------------------------------------------
-    # Final weighted score
-    # --------------------------------------------------
-    w_spatial = 1.0
-    w_curv = 2.0
-    w_tip = 4.0
+    if curv_tgt is None or curv_ref is None:
+        return np.inf, None
 
-    score = (
-        w_spatial * spatial_term +
-        w_curv * curvature_term +
-        w_tip * tip_term
-    )
+    m = min(len(curv_tgt), len(curv_ref))
+    curv_tgt = curv_tgt[:m]
+    curv_ref = curv_ref[:m]
+
+    curvature_error = np.mean(np.abs(curv_tgt - curv_ref))
+
+    # --- direction ---
+    dir_tgt = discrete_direction(tgt_line_pts)
+    dir_ref = discrete_direction(ref_line_pts)
+
+    if dir_tgt is None or dir_ref is None:
+        return np.inf, None
+
+    k = min(len(dir_tgt), len(dir_ref))
+    dir_tgt = dir_tgt[:k]
+    dir_ref = dir_ref[:k]
+
+    direction_error = mean_angular_error(dir_tgt, dir_ref)
+
+    # --- weighted combination ---
+    W_CURV = 1.0
+    W_DIR  = 0.1   # start conservative; increase if curvature dominates too much
+
+    score = W_CURV * curvature_error + W_DIR * direction_error
     return float(score), bbox_poly
+
 
 def clip_line_to_bbox(p0, p1, bbox_min, bbox_max):
     """
@@ -757,6 +728,28 @@ def make_points_on_target_rail(target_pts, n_points=100):
 
     return line_pts, np.arange(len(line_pts))
 
+def make_points_on_reference_rail(reference_pts, bbox_poly, n_points=100):
+    """
+    Sample n_points along the reference rail,
+    restricted to points inside bbox_poly.
+    """
+
+    from matplotlib.path import Path as Pathh
+
+    bbox_path = Pathh(bbox_poly)
+    inside = bbox_path.contains_points(reference_pts)
+    ref_inside = reference_pts[inside]
+
+    if len(ref_inside) < n_points:
+        return None, None
+
+    ordered = order_points_by_arclength(ref_inside)
+
+    idx = np.linspace(0, len(ordered) - 1, n_points).astype(int)
+    line_pts = ordered[idx]
+
+    return line_pts, idx
+
 def extend_line(p0, p1, scale=1000.0):
     """
     Extend line p0→p1 in both directions by a large factor.
@@ -786,7 +779,17 @@ def plot_icp_overlap(
     _clear_icp_caches()
     fig, ax = plt.subplots(figsize=(6, 6))
     # --- Precompute 20-point rail line once ---
-    line20_pts, _ = make_points_on_target_rail(aligned_target_pts)
+    line20_pts, _ = make_points_on_target_rail(aligned_target_pts, n_points=20)
+
+    line100_tgt, _ = make_points_on_target_rail(
+        aligned_target_pts,
+        n_points=100
+    )
+
+    line100_ref, _ = (
+        make_points_on_reference_rail(reference_pts, bbox, n_points=100)
+        if bbox is not None else (None, None)
+    )
     if line20_pts is None:
         return None
 
@@ -823,6 +826,37 @@ def plot_icp_overlap(
             s=10, color="blue",
             label="Reference (used, single rail)"
         )
+
+    """if line100_ref is not None:
+        ax.scatter(
+            line100_ref[:, 0],
+            line100_ref[:, 1],
+            s=28,
+            facecolors="none",
+            edgecolors="green",
+            linewidths=1.5,
+            label="Reference rail (100 pts)"
+        )
+        step = 20  # label every 20th point
+        for i in range(0, len(line100_ref), step):
+            p = line100_ref[i]
+            ax.text(
+                p[0], p[1],
+                str(i),
+                fontsize=10,
+                color="green",
+                ha="center",
+                va="center",
+                zorder=20,
+                clip_on=False,
+                bbox=dict(
+                    facecolor="white",
+                    edgecolor="green",
+                    linewidth=0.5,
+                    alpha=0.7,
+                    pad=0.5
+                )
+            )"""
     # --------------------------------------------------
     # 5) Split and plot target rails
     # --------------------------------------------------
@@ -832,7 +866,16 @@ def plot_icp_overlap(
         s=8, color="orange",
         label="Target (single rail)"
     )
-
+    """if line100_tgt is not None:
+        ax.scatter(
+            line100_tgt[:, 0],
+            line100_tgt[:, 1],
+            s=28,
+            facecolors="none",
+            edgecolors="red",
+            linewidths=1.5,
+            label="Target rail (100 pts)"
+        )"""
     # --------------------------------------------------
     # 6) Draw bounding box
     # --------------------------------------------------
@@ -864,22 +907,25 @@ def plot_icp_overlap(
                 color="black", linewidth=3,
                 label="Target avg width")
 
-    ax.plot(
-        line20_pts[:, 0],
-        line20_pts[:, 1],
-        color="red",
-        linewidth=2,
-        label="20-point rail line"
-    )
+    """step = 20  # label every 20th point on 100-pt target rail
+    for i in range(0, len(line100_tgt), step):
+        p = line100_tgt[i]
+        ax.text(
+            p[0], p[1],
+            str(i),
+            fontsize=10,
+            color="red",
+            zorder=21,
+            clip_on=False,
+            bbox=dict(
+                facecolor="white",
+                edgecolor="red",
+                linewidth=0.5,
+                alpha=0.8,
+                pad=0.4
+            )
+        )"""
 
-    for i, p in enumerate(line20_pts):
-        ax.text(p[0], p[1], str(i), fontsize=8, color="red")
-
-    # --- Brown rail extended to bbox ---
-    p_ext0, p_ext1 = extend_line(
-        line20_pts[0],
-        line20_pts[-1]
-    )
     # --------------------------------------------------
     # 8) Final formatting
     # --------------------------------------------------
