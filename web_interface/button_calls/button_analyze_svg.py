@@ -61,19 +61,13 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         doc = db_handler.collection.find_one({"sample_id": sample_id})  # Reload doc after update
 
     # get all plots of current sample
-    if distance_calculation != "ICP":
-        curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
-    else:
-        curvature_plot_img = None
-        curvature_color_img = None
-        angle_plot_img = None
-        status_msg = "ICP analysis completed"
+    curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
     analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
     compute_status = compute_curvature_for_all_items(analysis_config)
 
     # Find close matches. Recalculate them if curvature data was recalculated and close matches are outdated.
     # Otherwise, load the closest match from the DB
-    if distance_calculation == "ICP":
+    if distance_value_dataset == "ICP":
         matches = find_icp_closest_matches(
             analysis_config,
             top_k=20
@@ -111,7 +105,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_svg_html = format_svg_for_display(closest_svg_no_fill)
 
         # Load curvature data of closest match and generate plots
-        if distance_calculation != "ICP":
+        if distance_value_dataset != "ICP":
             analysis_config["sample_id"] = closest_id
             closest_plot_img, closest_color_img, closest_angle_img, _ = generate_all_plots(analysis_config)
             closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
@@ -154,7 +148,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     db_handler.use_collection("svg_raw")
     sample_type = db_handler.get_sample_type(sample_id)
     # Load the full list of closest matches from DB
-    if distance_calculation != "ICP":
+    if distance_value_dataset != "ICP":
         closest_matches_list = db_handler.get_closest_matches(sample_id)
 
     db_handler.use_collection("svg_template_types")
@@ -166,7 +160,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     # Combine status messages
     final_status_message = f"{compute_status}\n{status_msg}"
 
-    if distance_calculation == "ICP" and closest_id is not None:
+    if distance_value_dataset == "ICP" and closest_id is not None:
         # hide ALL curvature plots (target + closest)
         curvature_plot_img = None
         curvature_color_img = None
