@@ -402,6 +402,7 @@ def find_enhanced_closest_curvature(analysis_config, top_k=20):
     db_handler.collection.update_one(
         {"sample_id": sample_id},
         {"$set": {"closest_matches": top_matches,
+                  "full_closest_matches": top_matches,
                   "closest_matches_valid": True}
          }
     )

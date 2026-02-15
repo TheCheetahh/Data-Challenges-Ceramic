@@ -1,26 +1,36 @@
-from bson import ObjectId
-from web_interface.button_calls.button_add_rule import load_rules
 from database_handler import MongoDBHandler
+from web_interface.button_calls.button_add_rule import load_rules
 
 
-def click_delete_rule(selected_index, ids):
-    """Delete a selected rule and return updated table and reset selection."""
+def click_delete_rule(delete_input):
 
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_synonym_rules")
 
-    if selected_index is None or not ids:
-        # Nothing to delete, return current table and empty outputs
-        table_rows, new_ids = load_rules()
-        return table_rows, new_ids, None, "**Selected rule:** none"
+    if delete_input:
 
-    rule_id = ObjectId(ids[selected_index])
-    db_handler.collection.delete_one({"_id": rule_id})
+        delete_name = delete_input.strip().lower()
+        groups = list(db_handler.collection.find({}))
 
-    # Reload rules after deletion
-    table_rows, new_ids = load_rules()
+        for group in groups:
 
-    selected_label = "**Selected rule:** none"
+            names = [n.strip().lower() for n in group.get("members", [])]
+            if delete_name in names:
 
-    # Reset selected_row to None after deleting
-    return table_rows, new_ids, None, selected_label
+                updated_names = [n for n in names if n != delete_name]
+                if len(updated_names) >= 2:
+
+                    db_handler.collection.update_one(
+                        {"_id": group["_id"]},
+                        {"$set": {"members": updated_names}}
+                    )
+
+                else:
+
+                    db_handler.collection.delete_one(
+                        {"_id": group["_id"]}
+                    )
+
+    table_rows, ids = load_rules()
+
+    return table_rows, ids, None, "**Selected rule:** none"

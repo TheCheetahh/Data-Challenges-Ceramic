@@ -2,10 +2,11 @@ from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display, remove_svg_fill
 from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_items, \
     find_enhanced_closest_curvature, compute_curvature_for_one_item
+from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
 
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
-                      smooth_factor, smooth_window, n_samples):
+                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox):
     """
     called by button
     calculates the graph data, stores it in db and displays it
@@ -24,7 +25,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "smooth_method": smooth_method,
         "smooth_factor": smooth_factor,
         "smooth_window": smooth_window,
-        "n_samples": n_samples
+        "n_samples": n_samples,
+        "duplicate_synonym_checkbox": duplicate_synonym_checkbox
     }
 
     # Get the document to check for cropped_svg
@@ -97,6 +99,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_angle_img = None
         closest_id_text = "No closest match found"
 
+    if duplicate_synonym_checkbox:
+        filter_synonym_matches(sample_id)
+
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")
     sample_type = db_handler.get_sample_type(sample_id)
@@ -128,5 +133,5 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_type,
         closest_matches_list,  # list of closest matches
         current_index,  # starting index is always 0
-        f"{1} / 20"
+        f"{1} / {len(closest_matches_list)}"
     )

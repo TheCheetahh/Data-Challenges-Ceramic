@@ -10,6 +10,7 @@ from web_interface.button_calls.button_save_cropped_svg import click_save_croppe
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 from web_interface.button_calls.button_batch_analyze import click_batch_analyze
+from web_interface.other_gradio_components.checkbox_synonym import update_checkbox_synonym
 from web_interface.other_gradio_components.crop_svg import change_crop_svg_dropdown, update_crop_preview
 
 css = """
@@ -189,6 +190,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         interactive=True
                     )
 
+                    duplicate_synonym_checkbox = gr.Checkbox(label=" Show all synonym results", value=False)
+
                     with gr.Row():
                         previous_sample_button = gr.Button("←")
                         index_display = gr.Markdown("-/-", elem_id="centered_md")
@@ -230,6 +233,11 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             # Delete section
             selected_label = gr.Markdown("**Selected rule:** none")
             with gr.Row():
+                delete_input = gr.Textbox(
+                    label="Synonym to delete from group",
+                    placeholder="e.g. Nb.9",
+                    scale=2
+                )
                 delete_button = gr.Button("Delete selected rule", variant="stop")
             selected_row = gr.State(None)
             rule_ids = gr.State([])
@@ -267,7 +275,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     analyze_button.click(
         fn=click_analyze_svg,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, duplicate_synonym_checkbox],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
@@ -329,7 +337,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     batch_analyse_button.click(
         fn=click_batch_analyze,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, duplicate_synonym_checkbox],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
@@ -382,7 +390,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     delete_button.click(
         fn=click_delete_rule,
-        inputs=[selected_row, rule_ids],
+        inputs=[delete_input],
         outputs=[synonym_table, rule_ids, selected_row, selected_label]
     )
 
@@ -392,4 +400,11 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     synonym_table.select(
         fn=select_on_row,
         outputs=[selected_row, selected_label]
+    )
+
+    # TODO there should be an error with the index
+    synonym_input.change(
+        fn=update_checkbox_synonym,
+        inputs=[current_sample_state, synonym_input],
+        outputs=[closest_list_state]
     )
