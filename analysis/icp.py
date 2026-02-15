@@ -4,6 +4,18 @@ from scipy.spatial import cKDTree
 import io
 import matplotlib.pyplot as plt
 from PIL import Image
+from collections import deque
+
+# --------------------------------------------------
+# ICP caches (cleared explicitly at safe boundaries)
+# --------------------------------------------------
+_ORDER_CACHE = {}
+_SIGNED_WIDTH_CACHE = {}
+
+def _clear_icp_caches():
+    _ORDER_CACHE.clear()
+    _SIGNED_WIDTH_CACHE.clear()
+
 def prepare_icp_geometry_from_svg_string(svg_string, n_points):
     """
     Parse SVG string → sampled, centered outline points + avg width
@@ -179,21 +191,21 @@ def run_icp(source_pts, target_pts,
     return float(best_err), src
 
 def signed_width_coordinate(pts):
-    """
-    Signed distance of points from the shape centerline.
-    Used to separate the two outline rails.
-    """
+    key = (pts.shape[0], pts.tobytes())
+    if key in _SIGNED_WIDTH_CACHE:
+        return _SIGNED_WIDTH_CACHE[key]
+
     mean = pts.mean(axis=0)
     X = pts - mean
 
-    # PCA to get main (length) direction
     _, _, Vt = np.linalg.svd(X, full_matrices=False)
     main_dir = Vt[0]
-
-    # perpendicular = width direction
     width_dir = np.array([-main_dir[1], main_dir[0]])
 
-    return X @ width_dir
+    w = X @ width_dir
+    _SIGNED_WIDTH_CACHE[key] = w
+    return w
+
 
 def count_rail_clusters_1d(pts, gap_ratio=0.15, min_cluster_size=20):
     """
@@ -232,47 +244,6 @@ def count_rail_clusters_1d(pts, gap_ratio=0.15, min_cluster_size=20):
     cluster_count = len(split_indices) + 1
 
     return cluster_count
-
-
-def top_percent_nn_matches(reference_pts, aligned_target_pts, top_percent):
-    """
-    Returns:
-    - top reference points
-    - their nearest neighbors in the aligned target
-    """
-    y = reference_pts[:, 1]
-    cutoff = np.percentile(y, top_percent * 100)
-    ref_top = reference_pts[y <= cutoff]
-
-    if len(ref_top) == 0:
-        return None, None
-
-    tree = cKDTree(aligned_target_pts)
-    _, idx = tree.query(ref_top)
-    tgt_nn = aligned_target_pts[idx]
-
-    return ref_top, tgt_nn
-
-def same_height_distance(src_pts, dst_pts):
-    """
-    For each src point, find the dst point with closest Y value
-    and return horizontal (X) distance.
-    """
-    if len(src_pts) == 0 or len(dst_pts) == 0:
-        return None
-
-    dst_y = dst_pts[:, 1]
-
-    dists = []
-
-    for p in src_pts:
-        y = p[1]
-        idx = np.argmin(np.abs(dst_y - y))
-        dx = np.linalg.norm(p - dst_pts[idx])
-        dists.append(dx)
-
-    return np.array(dists)
-
 
 def adjust_bbox_to_include_split_rails(reference_pts, bbox_min, bbox_max,
                                        gap_ratio=0.15, min_cluster_size=20):
@@ -332,6 +303,7 @@ def find_icp_matches(
     """
     reference_dict: { sample_id: reference_pts }
     """
+    _clear_icp_caches()
     results = []
 
     for ref_id, ref_pts in reference_dict.items():
@@ -418,77 +390,56 @@ def cut_bbox_by_line(points, p0, p1, keep_side=1):
     return keep_side * cross >= 0
 
 def order_points_by_arclength(pts, k=6):
-    """
-    Robust ordering of points along a single rail using
-    graph geodesic longest path (no PCA, no zigzag).
-    """
+    key = (pts.shape[0], pts.tobytes())
+    if key in _ORDER_CACHE:
+        return _ORDER_CACHE[key]
+
     from scipy.spatial import cKDTree
     import heapq
 
     n = len(pts)
     tree = cKDTree(pts)
-
-    # --- build adjacency list ---
     neighbors = tree.query(pts, k=k+1)[1][:, 1:]
 
     graph = [[] for _ in range(n)]
     for i in range(n):
+        pi = pts[i]
         for j in neighbors[i]:
-            d = np.linalg.norm(pts[i] - pts[j])
-            graph[i].append((j, d))
-            graph[j].append((i, d))
+            if j > i:
+                d = np.linalg.norm(pi - pts[j])
+                graph[i].append((j, d))
+                graph[j].append((i, d))
 
-    # --- Dijkstra ---
-    def dijkstra(start):
-        dist = np.full(n, np.inf)
+    def bfs_farthest(start):
+        dist = np.full(n, -1.0)
         prev = np.full(n, -1, dtype=int)
+        q = deque([start])
         dist[start] = 0.0
-        pq = [(0.0, start)]
 
-        while pq:
-            d, u = heapq.heappop(pq)
-            if d > dist[u]:
-                continue
+        while q:
+            u = q.popleft()
             for v, w in graph[u]:
-                nd = d + w
-                if nd < dist[v]:
-                    dist[v] = nd
+                if dist[v] < 0:
+                    dist[v] = dist[u] + w
                     prev[v] = u
-                    heapq.heappush(pq, (nd, v))
-        return dist, prev
+                    q.append(v)
 
-    # --- find graph diameter ---
-    d0, _ = dijkstra(0)
-    a = np.argmax(d0)
+        end = np.argmax(dist)
+        return end, prev
 
-    d1, prev = dijkstra(a)
-    b = np.argmax(d1)
+    a, _ = bfs_farthest(0)
+    b, prev = bfs_farthest(a)
 
-    # --- recover path ---
     path = []
     cur = b
     while cur != -1:
         path.append(cur)
         cur = prev[cur]
-    path.reverse()
 
-    return pts[path]
 
-def extract_single_rail(pts, side="auto"):
-    """
-    Returns points belonging to ONE outline rail.
-    side: "left", "right", or "auto"
-    """
-    w = signed_width_coordinate(pts)
-
-    if side == "left":
-        return pts[w < 0]
-    if side == "right":
-        return pts[w >= 0]
-
-    # auto: pick denser side
-    return pts[w < 0] if np.sum(w < 0) >= np.sum(w >= 0) else pts[w >= 0]
-
+    ordered = pts[path]
+    _ORDER_CACHE[key] = ordered
+    return ordered
 
 def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1):
     """
@@ -560,8 +511,9 @@ def icp_score(reference_pts,
     Always returns:
         (score, bbox)   or   (np.inf, None)
     """
-    print("\n--- ICP SCORE DEBUG ---")
-    print("Template:", ref_id)
+    if False:
+        print("\n--- ICP SCORE DEBUG ---")
+        print("Template:", ref_id)
     # --------------------------------------------------
     # Basic safety checks
     # --------------------------------------------------
@@ -614,7 +566,7 @@ def icp_score(reference_pts,
     n = len(ordered)
     k = max(5, int(0.15 * n))   # tail region near the end
 
-    line20_pts, _ = make_20_line_points_on_target_rail(aligned_target_pts)
+    line20_pts, _ = make_points_on_target_rail(aligned_target_pts)
     line_p0 = line20_pts[0]
     line_p1 = line20_pts[-1]
 
@@ -643,7 +595,7 @@ def icp_score(reference_pts,
     # --------------------------------------------------
     ref_rail = ref_box
     tgt_rail = tgt_box
-    line20_pts, line20_ids = make_20_line_points_on_target_rail(tgt_rail)
+    line20_pts, line20_ids = make_points_on_target_rail(tgt_rail)
     # --------------------------------------------------
     # 3) Curvature comparison per rail
     # --------------------------------------------------
@@ -751,22 +703,6 @@ def icp_score(reference_pts,
     )
     return float(score), bbox_poly
 
-def same_height_matches(src_pts, dst_pts):
-    """
-    For each src point, return the dst point with closest Y.
-    """
-    if len(src_pts) == 0 or len(dst_pts) == 0:
-        return None
-
-    dst_y = dst_pts[:, 1]
-    matches = []
-
-    for p in src_pts:
-        idx = np.argmin(np.abs(dst_y - p[1]))
-        matches.append(dst_pts[idx])
-
-    return np.array(matches)
-
 def clip_line_to_bbox(p0, p1, bbox_min, bbox_max):
     """
     Liang–Barsky line clipping.
@@ -806,10 +742,10 @@ def clip_line_to_bbox(p0, p1, bbox_min, bbox_max):
     q1 = np.array([x0 + u2 * dx, y0 + u2 * dy])
     return q0, q1
 
-def make_20_line_points_on_target_rail(target_pts, n_points=20):
+def make_points_on_target_rail(target_pts, n_points=100):
     """
     Sample points along a single continuous rail
-    using geodesic ordering (no PCA, no zigzag).
+    using geodesic ordering
     """
     ordered = order_points_by_arclength(target_pts)
 
@@ -847,10 +783,10 @@ def plot_icp_overlap(
     - Bounding box
     - Average width lines
     """
-
+    _clear_icp_caches()
     fig, ax = plt.subplots(figsize=(6, 6))
     # --- Precompute 20-point rail line once ---
-    line20_pts, _ = make_20_line_points_on_target_rail(aligned_target_pts)
+    line20_pts, _ = make_points_on_target_rail(aligned_target_pts)
     if line20_pts is None:
         return None
 
