@@ -27,7 +27,8 @@ def click_save_cropped_svg(sample_id, crop_start, crop_end):
                 "cropped_svg": cropped_svg,
                 "crop_start": crop_start,
                 "crop_end": crop_end,
-                "outdated_curvature": True
+                "outdated_curvature": True,
+                "icp_data": None
             }
         }
     )
