@@ -1,8 +1,7 @@
 from analysis.compute_curvature_data import generate_all_plots
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display
-from analysis.icp import plot_icp_overlap
-import numpy as np
+
 
 def click_next_closest_sample(distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_id, closest_list_state, closest_index_state, smooth_method, smooth_factor, smooth_window, n_samples):
     """
@@ -72,55 +71,8 @@ def click_next_closest_sample(distance_type_dataset, distance_value_dataset, dis
         "n_samples": n_samples
     }
 
-    # --- generate correct plots depending on mode ---
-    if distance_calculation == "ICP":
-
-        # load target from svg_raw
-        db_handler.use_collection("svg_raw")
-        target_doc = db_handler.collection.find_one(
-            {"sample_id": current_sample_id}
-        )
-
-        if not target_doc:
-            print("Target doc not found for:", current_sample_id)
-
-        elif "icp_data" not in target_doc:
-            print("icp_data missing in:", target_doc.keys())
-
-        # load reference from template collection
-        db_handler.use_collection("svg_template_types")
-        ref_doc = db_handler.collection.find_one(
-            {"sample_id": next_id}
-        )
-
-        if not target_doc or "icp_data" not in target_doc:
-            return (
-                "<p style='color:red;'>ICP data missing for target</p>",
-                None, None, None,
-                "No type",
-                new_index,
-                label_text,
-                f"{new_index+1} / {len(closest_list_state)}"
-            )
-
-        target_pts = np.array(target_doc["icp_data"]["outline_points"])
-        ref_pts = np.array(ref_doc["icp_data"]["outline_points"])
-
-        aligned_target_pts = np.array(next_item["aligned_target"])
-        bbox = next_item["bbox"]
-
-        plot_img = plot_icp_overlap(
-            target_pts,
-            aligned_target_pts,
-            ref_pts,
-            bbox=bbox
-        )
-
-        color_img = None
-        angle_plot_img = None
-
-    else:
-        plot_img, color_img, angle_plot_img, _ = generate_all_plots(analysis_config)
+    # --- load SVG + curvature plots + type text ---
+    plot_img, color_img, angle_plot_img, _ = generate_all_plots(analysis_config)
 
     # Load cleaned SVG of that sample id
     cleaned_svg, error = db_handler.get_cleaned_svg(next_id)

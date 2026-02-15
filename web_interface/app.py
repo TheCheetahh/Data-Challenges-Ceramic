@@ -242,8 +242,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  closest_type_output,
                  closest_list_state,
                  current_index_state,
-                 index_display,
-                 current_sample_state
+                 index_display
                  ]
     )
 

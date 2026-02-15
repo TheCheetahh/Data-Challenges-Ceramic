@@ -11,7 +11,7 @@ from analysis.analyze_curvature import normalize_path, curvature_from_points
 from analysis.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
     dtw_distance, integral_difference
 from database_handler import MongoDBHandler
-
+from analysis.icp import ensure_icp_geometry, run_icp, icp_score
 
 def compute_curvature_for_all_items(analysis_config):
     """
@@ -216,156 +216,147 @@ def generate_all_plots(analysis_config):
     n_samples = analysis_config.get("n_samples")
     distance_value_dataset = analysis_config.get("distance_value_dataset")
 
-    if distance_value_dataset != "ICP":
-
-        # set db handler
-        if distance_type_dataset == "other samples":
-            db_handler.use_collection("svg_raw")
-        else:
-            db_handler.use_collection("svg_template_types")
-
-        # get document of the sample id
-        doc = db_handler.collection.find_one({"sample_id": sample_id})
-        if not doc or "cleaned_svg" not in doc:
-            return None, None, None, f"❌ No cleaned SVG found for sample_id {sample_id}"
-
-        # figure out if data is already computed
-        recompute = True
-        if "curvature_data" in doc and "settings" in doc["curvature_data"]:
-            stored = doc["curvature_data"]["settings"]
-            if (
-                    stored.get("smooth_method") == smooth_method and
-                    float(stored.get("smooth_factor", 0)) == float(smooth_factor) and
-                    int(stored.get("smooth_window", 0)) == int(smooth_window) and
-                    int(stored.get("n_samples", 0)) == int(n_samples)
-            ):
-                recompute = False
-
-        # compute data if needed
-        if recompute:
-            print("Debug: recompute of plots")
-            compute_curvature_for_one_item(analysis_config, sample_id)
-            doc = db_handler.collection.find_one({"sample_id": sample_id})
-
-        curvature_data = doc["curvature_data"]
-        arc_lengths = np.array(curvature_data["arc_lengths"])
-        curvature = np.array(curvature_data["curvature"])
-        directions = np.array(curvature_data["directions"])
-
-        lip_anchor = curvature_data.get("lip_anchor", {})
-        lip_angle_arc = lip_anchor.get("angle", {}).get("arc_length")
-        lip_curv_arc = lip_anchor.get("curvature", {}).get("arc_length")
-
-        status_msg = f"✅ Loaded stored curvature for sample_id {sample_id}"
-
-        # Reconstruct points for color map
-        # Use cropped_svg if available, otherwise use cleaned_svg
-        svg_file_like = io.StringIO(doc.get("cropped_svg") or doc.get("cleaned_svg"))
-
-        paths, _ = svg2paths(svg_file_like)
-        path = paths[0]
-
-        ts = np.linspace(0, 1, len(curvature))
-        points = np.array([path.point(t) for t in ts])
-        points = np.column_stack((points.real, points.imag))
-
-        stored_settings = curvature_data.get("settings", {})
-        smooth_method = stored_settings.get("smooth_method", smooth_method)
-        smooth_factor = stored_settings.get("smooth_factor", smooth_factor)
-        smooth_window = stored_settings.get("smooth_window", smooth_window)
-
-        points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
-
-        # ============================================================
-        # Curvature line plot (with lip markers)
-        # ============================================================
-        buf1 = io.BytesIO()
-        plt.figure(figsize=(10, 4))
-        plt.axhline(0, color="gray", linestyle="--")
-
-        plt.plot(arc_lengths, curvature, color="black", label="Curvature")
-
-        if lip_angle_arc is not None:
-            plt.axvline(lip_angle_arc, color="blue", linestyle="--", linewidth=2,
-                        label="Lip (angle)")
-
-        if lip_curv_arc is not None:
-            plt.axvline(lip_curv_arc, color="red", linestyle="--", linewidth=2,
-                        label="Lip (curvature)")
-
-        plt.title(f"Curvature along normalized arc length (sample {sample_id})")
-        plt.xlabel("Normalized arc length")
-        plt.ylabel("Curvature κ")
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(buf1, format="png")
-        plt.close()
-        buf1.seek(0)
-        curvature_plot_img = Image.open(buf1)
-
-        # ============================================================
-        # Curvature color map (geometry view)
-        # ============================================================
-        segments = np.stack([points[:-1], points[1:]], axis=1)
-        norm = Normalize(
-            vmin=-np.max(np.abs(curvature)),
-            vmax=np.max(np.abs(curvature)) * 0.8
-        )
-
-        buf2 = io.BytesIO()
-        fig, ax = plt.subplots(figsize=(6, 6))
-        lc = LineCollection(segments, cmap="coolwarm", norm=norm)
-        lc.set_array(curvature)
-        lc.set_linewidth(2)
-        ax.add_collection(lc)
-
-        ax.invert_yaxis()
-        ax.autoscale()
-        ax.set_aspect("equal")
-        ax.set_title("Curvature Color Map")
-        plt.colorbar(lc, ax=ax, label="Curvature κ")
-        plt.tight_layout()
-        plt.savefig(buf2, format="png")
-        plt.close()
-        buf2.seek(0)
-        curvature_color_img = Image.open(buf2)
-
-        # ============================================================
-        # Direction plot (with lip markers)
-        # ============================================================
-        directions = np.unwrap(directions)
-        directions_deg = np.degrees(directions)
-
-        buf3 = io.BytesIO()
-        plt.figure(figsize=(10, 4))
-        plt.plot(arc_lengths, directions_deg, color="blue", label="Direction")
-
-        if lip_angle_arc is not None:
-            plt.axvline(lip_angle_arc, color="blue", linestyle="--", linewidth=2,
-                        label="Lip (angle)")
-
-        if lip_curv_arc is not None:
-            plt.axvline(lip_curv_arc, color="red", linestyle="--", linewidth=2,
-                        label="Lip (curvature)")
-
-        plt.title(f"Direction along normalized arc length (sample {sample_id})")
-        plt.xlabel("Normalized arc length")
-        plt.ylabel("Angle to x-axis [°]")
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(buf3, format="png")
-        plt.close()
-        buf3.seek(0)
-        angle_plot_img = Image.open(buf3)
-
-    # for ICP
+    # set db handler
+    if distance_type_dataset == "other samples":
+        db_handler.use_collection("svg_raw")
     else:
-        curvature_plot_img = None
-        curvature_color_img = None
-        angle_plot_img = None
-        status_msg = "ICP analysis completed"
+        db_handler.use_collection("svg_template_types")
+
+    # get document of the sample id
+    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if not doc or "cleaned_svg" not in doc:
+        return None, None, None, f"❌ No cleaned SVG found for sample_id {sample_id}"
+
+    # figure out if data is already computed
+    recompute = True
+    if "curvature_data" in doc and "settings" in doc["curvature_data"]:
+        stored = doc["curvature_data"]["settings"]
+        if (
+                stored.get("smooth_method") == smooth_method and
+                float(stored.get("smooth_factor", 0)) == float(smooth_factor) and
+                int(stored.get("smooth_window", 0)) == int(smooth_window) and
+                int(stored.get("n_samples", 0)) == int(n_samples)
+        ):
+            recompute = False
+
+    # compute data if needed
+    if recompute:
+        print("Debug: recompute of plots")
+        compute_curvature_for_one_item(analysis_config, sample_id)
+        doc = db_handler.collection.find_one({"sample_id": sample_id})
+
+    curvature_data = doc["curvature_data"]
+    arc_lengths = np.array(curvature_data["arc_lengths"])
+    curvature = np.array(curvature_data["curvature"])
+    directions = np.array(curvature_data["directions"])
+
+    lip_anchor = curvature_data.get("lip_anchor", {})
+    lip_angle_arc = lip_anchor.get("angle", {}).get("arc_length")
+    lip_curv_arc = lip_anchor.get("curvature", {}).get("arc_length")
+
+    status_msg = f"✅ Loaded stored curvature for sample_id {sample_id}"
+
+    # Reconstruct points for color map
+    # Use cropped_svg if available, otherwise use cleaned_svg
+    svg_file_like = io.StringIO(doc.get("cropped_svg") or doc.get("cleaned_svg"))
+
+    paths, _ = svg2paths(svg_file_like)
+    path = paths[0]
+
+    ts = np.linspace(0, 1, len(curvature))
+    points = np.array([path.point(t) for t in ts])
+    points = np.column_stack((points.real, points.imag))
+
+    stored_settings = curvature_data.get("settings", {})
+    smooth_method = stored_settings.get("smooth_method", smooth_method)
+    smooth_factor = stored_settings.get("smooth_factor", smooth_factor)
+    smooth_window = stored_settings.get("smooth_window", smooth_window)
+
+    points = normalize_path(points, smooth_method, smooth_factor, smooth_window)
+
+    # ============================================================
+    # Curvature line plot (with lip markers)
+    # ============================================================
+    buf1 = io.BytesIO()
+    plt.figure(figsize=(10, 4))
+    plt.axhline(0, color="gray", linestyle="--")
+
+    plt.plot(arc_lengths, curvature, color="black", label="Curvature")
+
+    if lip_angle_arc is not None:
+        plt.axvline(lip_angle_arc, color="blue", linestyle="--", linewidth=2,
+                    label="Lip (angle)")
+
+    if lip_curv_arc is not None:
+        plt.axvline(lip_curv_arc, color="red", linestyle="--", linewidth=2,
+                    label="Lip (curvature)")
+
+    plt.title(f"Curvature along normalized arc length (sample {sample_id})")
+    plt.xlabel("Normalized arc length")
+    plt.ylabel("Curvature κ")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(buf1, format="png")
+    plt.close()
+    buf1.seek(0)
+    curvature_plot_img = Image.open(buf1)
+
+    # ============================================================
+    # Curvature color map (geometry view)
+    # ============================================================
+    segments = np.stack([points[:-1], points[1:]], axis=1)
+    norm = Normalize(
+        vmin=-np.max(np.abs(curvature)),
+        vmax=np.max(np.abs(curvature)) * 0.8
+    )
+
+    buf2 = io.BytesIO()
+    fig, ax = plt.subplots(figsize=(6, 6))
+    lc = LineCollection(segments, cmap="coolwarm", norm=norm)
+    lc.set_array(curvature)
+    lc.set_linewidth(2)
+    ax.add_collection(lc)
+
+    ax.invert_yaxis()
+    ax.autoscale()
+    ax.set_aspect("equal")
+    ax.set_title("Curvature Color Map")
+    plt.colorbar(lc, ax=ax, label="Curvature κ")
+    plt.tight_layout()
+    plt.savefig(buf2, format="png")
+    plt.close()
+    buf2.seek(0)
+    curvature_color_img = Image.open(buf2)
+
+    # ============================================================
+    # Direction plot (with lip markers)
+    # ============================================================
+    directions = np.unwrap(directions)
+    directions_deg = np.degrees(directions)
+
+    buf3 = io.BytesIO()
+    plt.figure(figsize=(10, 4))
+    plt.plot(arc_lengths, directions_deg, color="blue", label="Direction")
+
+    if lip_angle_arc is not None:
+        plt.axvline(lip_angle_arc, color="blue", linestyle="--", linewidth=2,
+                    label="Lip (angle)")
+
+    if lip_curv_arc is not None:
+        plt.axvline(lip_curv_arc, color="red", linestyle="--", linewidth=2,
+                    label="Lip (curvature)")
+
+    plt.title(f"Direction along normalized arc length (sample {sample_id})")
+    plt.xlabel("Normalized arc length")
+    plt.ylabel("Angle to x-axis [°]")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(buf3, format="png")
+    plt.close()
+    buf3.seek(0)
+    angle_plot_img = Image.open(buf3)
 
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
@@ -568,8 +559,58 @@ def get_distance(analysis_config, oid, curvature, other_curv,
             pass
         return float(min_distance)
 
-    elif distance_value_dataset == "lip_aligned_curvature":
-        return None
+    elif distance_value_dataset == "ICP":
+        # Pairwise ICP distance between sample and template
+        db_handler = analysis_config["db_handler"]
+
+        n_target = analysis_config.get("icp_n_target", 300)
+        n_ref = analysis_config.get("icp_n_reference", 500)
+
+        icp_params = {
+            "iters": analysis_config.get("icp_iters", 30),
+            "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
+            "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
+            "top_percent": analysis_config.get("icp_top_percent", 0.2)
+        }
+
+        # --------------------------------------------------
+        # Load target geometry
+        # --------------------------------------------------
+        db_handler.use_collection("svg_raw")
+        target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+        if target_doc is None:
+            return None
+
+        target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+        target_pts = np.array(target_icp["outline_points"])
+
+        # --------------------------------------------------
+        # Load reference geometry
+        # --------------------------------------------------
+        db_handler.use_collection("svg_template_types")
+        ref_doc = db_handler.collection.find_one({"sample_id": oid})
+        if ref_doc is None:
+            return None
+
+        ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+        ref_pts = np.array(ref_icp["outline_points"])
+
+        # --------------------------------------------------
+        # Run pairwise ICP
+        # --------------------------------------------------
+        err, aligned = run_icp(
+            target_pts,
+            ref_pts,
+            iters=icp_params["iters"],
+            max_total_deg=icp_params["max_total_deg"],
+            max_scale_step=icp_params["max_scale_step"]
+        )
+
+        if not np.isfinite(err):
+            return None
+
+        score, _ = icp_score(ref_pts, aligned, ref_id=oid)
+        return float(score)
     elif distance_value_dataset == "cropped curvature":
         return float(sum([apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation)]))
     elif distance_value_dataset == "only angle":
