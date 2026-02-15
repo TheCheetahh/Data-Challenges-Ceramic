@@ -990,6 +990,9 @@ def ensure_icp_geometry(doc, db_handler, n_points):
     """
     function to get info for icp method
     """
+    if doc is None:
+        raise ValueError("ensure_icp_geometry called with doc=None")
+
     if doc.get("icp_data"):
         settings = doc["icp_data"].get("settings", {})
         if settings.get("n_points") == n_points:
