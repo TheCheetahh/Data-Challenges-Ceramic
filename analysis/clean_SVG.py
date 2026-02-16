@@ -3,6 +3,8 @@ import re
 import xml.etree.ElementTree as ET
 import argparse
 
+from web_interface.formating_functions.format_svg import crop_svg_path
+
 
 # ---------------------------------------------------------
 # Path Complexity
@@ -179,11 +181,27 @@ def clean_all_svgs(db_handler, svg_file_type):
 
         cleaned_svg = get_most_complex_black_fill(raw_content)
 
+        if not cleaned_svg:
+            print(f"⚠️ Cropping failed for {doc.get('filename')}")
+            cropped_svg = None
+            crop_start = None
+            crop_end = None
+        else:
+            crop_start = 0.05
+            crop_end = 0.95
+            cropped_svg = crop_svg_path(cleaned_svg, crop_start, crop_end)
+
         if cleaned_svg:
             counter += 1
             collection.update_one(
                 {"_id": doc["_id"]},
-                {"$set": {"cleaned_svg": cleaned_svg}}
+                {"$set": {"cleaned_svg": cleaned_svg,
+                          "cropped_svg": cropped_svg,
+                          "crop_start": crop_start,
+                          "crop_end": crop_end,
+                          "outdated_curvature": True,
+                          "icp_data": None
+                          }}
             )
             print(f"✅ Updated {doc['filename']}")
         else:
