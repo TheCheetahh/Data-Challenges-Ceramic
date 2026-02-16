@@ -11,7 +11,7 @@ from analysis.analyze_curvature import normalize_path, curvature_from_points
 from analysis.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
     dtw_distance, integral_difference
 from database_handler import MongoDBHandler
-
+from analysis.icp import ensure_icp_geometry, run_icp, icp_score
 
 def compute_curvature_for_all_items(analysis_config):
     """
@@ -214,6 +214,90 @@ def generate_all_plots(analysis_config):
     smooth_factor = analysis_config.get("smooth_factor")
     smooth_window = analysis_config.get("smooth_window")
     n_samples = analysis_config.get("n_samples")
+    distance_value_dataset = analysis_config.get("distance_value_dataset")
+
+    # ============================================================
+    # ICP plot override
+    # ============================================================
+    if distance_value_dataset == "ICP":
+        from analysis.icp import plot_icp_overlap, ensure_icp_geometry, run_icp
+
+        # --- load target ICP geometry ---
+        n_target = analysis_config.get("icp_n_target", 300)
+        n_ref = analysis_config.get("icp_n_reference", 500)
+
+        db_handler.use_collection("svg_raw")
+        target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+
+        if target_doc is None:
+            return None, None, None, f"❌ ICP target not found in svg_raw: {sample_id}"
+
+        target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+        target_pts = np.array(target_icp["outline_points"])
+
+        # --------------------------------------------------
+        # Resolve reference for ICP plotting
+        # --------------------------------------------------
+        closest = None
+
+        # Case 1: ICP matches already stored
+        stored_matches = target_doc.get("icp_matches")
+        if stored_matches:
+            closest = stored_matches[0]["id"]
+
+        # Case 2: No stored matches → compute one on the fly
+        if closest is None:
+            from analysis.icp import find_icp_matches
+
+            db_handler.use_collection("svg_template_types")
+
+            refs = {}
+            for ref_doc in db_handler.collection.find({"icp_data": {"$exists": True}}):
+                refs[ref_doc["sample_id"]] = np.array(
+                    ref_doc["icp_data"]["outline_points"]
+                )
+
+            matches = find_icp_matches(
+                target_pts,
+                refs,
+                {
+                    "iters": analysis_config.get("icp_iters", 30),
+                    "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
+                    "max_scale_step": analysis_config.get("icp_max_scale", 0.2)
+                },
+                top_k=1
+            )
+
+            if not matches:
+                return None, None, None, "❌ ICP failed to find any reference"
+
+            closest = matches[0]["id"]
+
+        ref_id = closest
+
+        ref_doc = db_handler.collection.find_one({"sample_id": ref_id})
+        ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+        ref_pts = np.array(ref_icp["outline_points"])
+
+        # --- run ICP once more for visualization ---
+        err, aligned = run_icp(
+            target_pts,
+            ref_pts,
+            iters=analysis_config.get("icp_iters", 30),
+            max_total_deg=analysis_config.get("icp_max_deg", 2.0),
+            max_scale_step=analysis_config.get("icp_max_scale", 0.2)
+        )
+
+        _, bbox = icp_score(ref_pts, aligned, ref_id=ref_id)
+
+        icp_img = plot_icp_overlap(
+            target_pts,
+            aligned,
+            ref_pts,
+            bbox=bbox
+        )
+
+        return icp_img, None, None, f"✅ ICP overlap: {sample_id} vs {ref_id}"
 
     # set db handler
     if distance_type_dataset == "other samples":
@@ -559,8 +643,58 @@ def get_distance(analysis_config, oid, curvature, other_curv,
             pass
         return float(min_distance)
 
-    elif distance_value_dataset == "lip_aligned_curvature":
-        return None
+    elif distance_value_dataset == "ICP":
+        # Pairwise ICP distance between sample and template
+        db_handler = analysis_config["db_handler"]
+
+        n_target = analysis_config.get("icp_n_target", 300)
+        n_ref = analysis_config.get("icp_n_reference", 500)
+
+        icp_params = {
+            "iters": analysis_config.get("icp_iters", 30),
+            "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
+            "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
+            "top_percent": analysis_config.get("icp_top_percent", 0.2)
+        }
+
+        # --------------------------------------------------
+        # Load target geometry
+        # --------------------------------------------------
+        db_handler.use_collection("svg_raw")
+        target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+        if target_doc is None:
+            return None
+
+        target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+        target_pts = np.array(target_icp["outline_points"])
+
+        # --------------------------------------------------
+        # Load reference geometry
+        # --------------------------------------------------
+        db_handler.use_collection("svg_template_types")
+        ref_doc = db_handler.collection.find_one({"sample_id": oid})
+        if ref_doc is None:
+            return None
+
+        ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+        ref_pts = np.array(ref_icp["outline_points"])
+
+        # --------------------------------------------------
+        # Run pairwise ICP
+        # --------------------------------------------------
+        err, aligned = run_icp(
+            target_pts,
+            ref_pts,
+            iters=icp_params["iters"],
+            max_total_deg=icp_params["max_total_deg"],
+            max_scale_step=icp_params["max_scale_step"]
+        )
+
+        if not np.isfinite(err):
+            return None
+
+        score, _ = icp_score(ref_pts, aligned, ref_id=oid)
+        return float(score)
     elif distance_value_dataset == "cropped curvature":
         return float(sum([apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation)]))
     elif distance_value_dataset == "only angle":
