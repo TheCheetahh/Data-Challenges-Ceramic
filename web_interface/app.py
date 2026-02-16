@@ -155,7 +155,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         next_sample_button = gr.Button("->")
 
                     closest_svg_output = gr.HTML(
-                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
+                        visible=True,
+                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
+                    )
+
+                    closest_icp_output = gr.Image(
+                        label="ICP Overlap",
+                        visible=False
+                    )
                     closest_curvature_plot_output = gr.Image(label="Curvature Plot")
                     closest_curvature_color_output = gr.Image(label="Curvature Color Map")
                     closest_angle_plot_output = gr.Image(label="Angle Plot")
@@ -234,6 +241,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  angle_plot_output,
                  status_output,
                  closest_svg_output,
+                 closest_icp_output,
                  closest_curvature_plot_output,
                  closest_curvature_color_output,
                  closest_angle_plot_output,
@@ -258,10 +266,13 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
-            closest_svg_output,
+            closest_svg_output,        # gr.update (SVG visible/hidden)
+            closest_icp_output,        # gr.update (ICP image visible/hidden)
+
             closest_curvature_plot_output,
             closest_curvature_color_output,
             closest_angle_plot_output,
+
             closest_type_output,
             current_index_state,
             closest_sample_id_output,
@@ -295,6 +306,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  angle_plot_output,
                  status_output,
                  closest_svg_output,
+                 closest_icp_output,
                  closest_curvature_plot_output,
                  closest_curvature_color_output,
                  closest_angle_plot_output,
