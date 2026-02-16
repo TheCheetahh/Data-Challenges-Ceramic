@@ -402,9 +402,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[selected_row, selected_label]
     )
 
-    # TODO there should be an error with the index
-    synonym_input.change(
+    """synonym_input.change(
         fn=update_checkbox_synonym,
         inputs=[current_sample_state, synonym_input],
         outputs=[closest_list_state]
-    )
+    )"""

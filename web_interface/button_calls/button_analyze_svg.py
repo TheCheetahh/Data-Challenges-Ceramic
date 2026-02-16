@@ -99,8 +99,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_angle_img = None
         closest_id_text = "No closest match found"
 
-    if duplicate_synonym_checkbox:
-        filter_synonym_matches(sample_id)
+    """if duplicate_synonym_checkbox:
+        filter_synonym_matches(sample_id)"""
 
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")
