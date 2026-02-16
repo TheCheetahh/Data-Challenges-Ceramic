@@ -4,7 +4,7 @@ from web_interface.formating_functions.format_svg import format_svg_for_display
 from analysis.icp import generate_icp_overlap_image
 import gradio as gr
 
-def click_next_closest_sample(distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_id, closest_list_state, closest_index_state, smooth_method, smooth_factor, smooth_window, n_samples):
+def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_id, closest_list_state, closest_index_state, smooth_method, smooth_factor, smooth_window, n_samples, next_or_prev):
     """
     Show the next closest sample using Gradio state variables.
 
@@ -59,7 +59,7 @@ def click_next_closest_sample(distance_type_dataset, distance_value_dataset, dis
         )
 
     # --- compute next index ---
-    new_index = (closest_index_state + 1) % len(closest_list_state)
+    new_index = (closest_index_state + next_or_prev) % len(closest_list_state)
 
     # --- get the next item ---
     next_item = closest_list_state[new_index]
