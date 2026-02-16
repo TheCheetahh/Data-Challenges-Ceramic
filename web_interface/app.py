@@ -3,14 +3,12 @@ import gradio as gr
 from database_handler import MongoDBHandler
 from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
+from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample
 from web_interface.button_calls.button_delete_rule import click_delete_rule
-from web_interface.button_calls.button_next_closest_sample import click_next_closest_sample
-from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 from web_interface.button_calls.button_batch_analyze import click_batch_analyze
-from web_interface.other_gradio_components.checkbox_synonym import update_checkbox_synonym
 from web_interface.other_gradio_components.crop_svg import change_crop_svg_dropdown, update_crop_preview
 
 css = """
@@ -40,6 +38,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     current_sample_state = gr.State(None)
     closest_list_state = gr.State([])
     current_index_state = gr.State(0)
+    next_index_one = gr.State(1)
+    prev_index_one = gr.State(-1)
 
     with gr.Tabs():
         # Tab for all upload related things
@@ -198,7 +198,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         next_sample_button = gr.Button("→")
 
                     closest_svg_output = gr.HTML(
-                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
+                        visible=True,
+                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
+                    )
+
+                    closest_icp_output = gr.Image(
+                        label="ICP Overlap",
+                        visible=False
+                    )
                     closest_curvature_plot_output = gr.Image(label="Curvature Plot")
                     closest_curvature_color_output = gr.Image(label="Curvature Color Map")
                     closest_angle_plot_output = gr.Image(label="Angle Plot")
@@ -282,6 +289,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  angle_plot_output,
                  status_output,
                  closest_svg_output,
+                 closest_icp_output,
                  closest_curvature_plot_output,
                  closest_curvature_color_output,
                  closest_angle_plot_output,
@@ -302,15 +310,17 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     )
 
     next_sample_button.click(
-        fn=click_next_closest_sample,
-        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state,
-                closest_list_state, current_index_state,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        fn=click_navigate_closest_sample,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, next_index_one],
         outputs=[
-            closest_svg_output,
+            closest_svg_output,        # gr.update (SVG visible/hidden)
+            closest_icp_output,        # gr.update (ICP image visible/hidden)
+
             closest_curvature_plot_output,
             closest_curvature_color_output,
             closest_angle_plot_output,
+
             closest_type_output,
             current_index_state,
             closest_sample_id_output,
@@ -319,18 +329,20 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     )
 
     previous_sample_button.click(
-        fn=click_previous_closest_sample,
-        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state,
-                closest_list_state, current_index_state,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+        fn=click_navigate_closest_sample,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, prev_index_one],
         outputs=[
-            closest_svg_output,  # svg_html
-            closest_curvature_plot_output,  # plot_img
-            closest_curvature_color_output,  # color_img
-            closest_angle_plot_output,  # angle_plot_img
-            closest_type_output,  # typ_text
-            current_index_state,  # new_index
-            closest_sample_id_output,  # label_text
+            closest_svg_output,  # gr.update (SVG visible/hidden)
+            closest_icp_output,  # gr.update (ICP image visible/hidden)
+
+            closest_curvature_plot_output,
+            closest_curvature_color_output,
+            closest_angle_plot_output,
+
+            closest_type_output,
+            current_index_state,
+            closest_sample_id_output,
             index_display
         ]
     )
@@ -345,6 +357,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  angle_plot_output,
                  status_output,
                  closest_svg_output,
+                 closest_icp_output,
                  closest_curvature_plot_output,
                  closest_curvature_color_output,
                  closest_angle_plot_output,
