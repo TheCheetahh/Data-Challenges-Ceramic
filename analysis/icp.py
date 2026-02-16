@@ -1073,3 +1073,40 @@ def find_icp_closest_matches(analysis_config, top_k=20):
         }}
     )
     return matches
+
+def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_config):
+    n_target = analysis_config.get("icp_n_target", 300)
+    n_ref = analysis_config.get("icp_n_reference", 500)
+
+    # Load target
+    db_handler.use_collection("svg_raw")
+    target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+    target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+    target_pts = np.array(target_icp["outline_points"])
+
+    # Load reference
+    db_handler.use_collection("svg_template_types")
+    ref_doc = db_handler.collection.find_one({"sample_id": template_id})
+    ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+    ref_pts = np.array(ref_icp["outline_points"])
+
+    # Run ICP again (cheap at top-1 scale)
+    err, aligned = run_icp(
+        target_pts,
+        ref_pts,
+        iters=analysis_config.get("icp_iters", 30),
+        max_total_deg=analysis_config.get("icp_max_deg", 2.0),
+        max_scale_step=analysis_config.get("icp_max_scale", 0.2)
+    )
+
+    score, bbox = icp_score(ref_pts, aligned, ref_id=template_id)
+
+    if not np.isfinite(score):
+        return None
+
+    return plot_icp_overlap(
+        target_pts,
+        aligned,
+        ref_pts,
+        bbox=bbox
+    )

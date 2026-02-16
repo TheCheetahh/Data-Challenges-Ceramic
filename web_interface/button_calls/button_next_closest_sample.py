@@ -1,7 +1,8 @@
 from analysis.compute_curvature_data import generate_all_plots
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display
-
+from analysis.icp import generate_icp_overlap_image
+import gradio as gr
 
 def click_next_closest_sample(distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_id, closest_list_state, closest_index_state, smooth_method, smooth_factor, smooth_window, n_samples):
     """
@@ -22,11 +23,17 @@ def click_next_closest_sample(distance_type_dataset, distance_value_dataset, dis
     # If state is empty or invalid → fallback
     if not isinstance(closest_list_state, list) or len(closest_list_state) == 0:
         return (
-            "<p>No closest samples available</p>",
-            None, None, None,
+            gr.update(value="<p>No closest samples available</p>", visible=True),
+            gr.update(visible=False),
+
+            None,
+            None,
+            None,
+
             "No type",
-            0,
-            "No closest sample"
+            closest_index_state,
+            "No closest sample",
+            "-/-"
         )
 
     # --- ensure list contains only valid dict entries ---
@@ -38,11 +45,17 @@ def click_next_closest_sample(distance_type_dataset, distance_value_dataset, dis
 
     if len(closest_list_state) == 0:
         return (
-            "<p>No usable closest samples available</p>",
-            None, None, None,
+            gr.update(value="<p>No closest samples available</p>", visible=True),
+            gr.update(visible=False),
+
+            None,
+            None,
+            None,
+
             "No type",
-            0,
-            "No closest sample"
+            closest_index_state,
+            "No closest sample",
+            "-/-"
         )
 
     # --- compute next index ---
@@ -75,23 +88,43 @@ def click_next_closest_sample(distance_type_dataset, distance_value_dataset, dis
     plot_img, color_img, angle_plot_img, _ = generate_all_plots(analysis_config)
 
     # Load cleaned SVG of that sample id
-    cleaned_svg, error = db_handler.get_cleaned_svg(next_id)
-    if error:
-        placeholder_html = f"<p style='color:red;'>❌ {error}</p>"
-        return (
-            placeholder_html, None, None, f"❌ {error}",
-            placeholder_html, None, None, "❌ No closest match."
+    if distance_value_dataset == "ICP":
+        # hide SVG
+        svg_update = gr.update(visible=False)
+
+        # generate NEW ICP plot for the new closest sample
+        icp_img = generate_icp_overlap_image(
+            db_handler,
+            current_sample_id,   # source sample stays the same
+            next_id,             # target changes
+            analysis_config
         )
-    # format the svg, so it can be displayed on the web page
-    svg_html = format_svg_for_display(cleaned_svg)
+        icp_update = gr.update(value=icp_img, visible=True)
+
+    else:
+        # normal SVG path
+        cleaned_svg, error = db_handler.get_cleaned_svg(next_id)
+        if error:
+            svg_update = gr.update(
+                value=f"<p style='color:red;'>❌ {error}</p>",
+                visible=True
+            )
+            icp_update = gr.update(visible=False)
+        else:
+            svg_html = format_svg_for_display(cleaned_svg)
+            svg_update = gr.update(value=svg_html, visible=True)
+            icp_update = gr.update(visible=False)
 
     typ_text = db_handler.get_sample_type(next_id)
 
     return (
-        svg_html,
+        svg_update,     # closest_svg_output (gr.update)
+        icp_update,     # closest_icp_output (gr.update)
+
         plot_img,
         color_img,
         angle_plot_img,
+
         typ_text,
         new_index,
         label_text,
