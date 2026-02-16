@@ -325,7 +325,8 @@ def find_icp_matches(
             "aligned_target": aligned.tolist(),
             "bbox": bbox
         }
-        for rid, score, aligned, bbox in results[:top_k]
+        for rid, score, aligned, bbox in results
+        # for rid, score, aligned, bbox in results[:top_k]
     ]
 
 def discrete_curvature(pts):

@@ -1,4 +1,5 @@
 import io
+import math
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -361,12 +362,11 @@ def generate_all_plots(analysis_config):
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
-def find_enhanced_closest_curvature(analysis_config, top_k=20):
+def find_enhanced_closest_curvature(analysis_config):
     """
     calculate close samples and save to db. return the top result
 
     :param analysis_config:
-    :param top_k:
     :return:
     """
 
@@ -374,6 +374,7 @@ def find_enhanced_closest_curvature(analysis_config, top_k=20):
     db_handler = analysis_config.get("db_handler")
     sample_id = analysis_config.get("sample_id")
     distance_type_dataset = analysis_config.get("distance_type_dataset")
+    top_k = analysis_config.get("top_k")
 
     # create db handler
     db_handler.use_collection("svg_raw")
@@ -414,7 +415,7 @@ def find_enhanced_closest_curvature(analysis_config, top_k=20):
     return closest["id"], closest["distance"], msg
 
 
-def calculate_distances(analysis_config, curvature, direction, top_k=20):
+def calculate_distances(analysis_config, curvature, direction, top_k):
     """
 
     :param direction:
@@ -455,7 +456,11 @@ def calculate_distances(analysis_config, curvature, direction, top_k=20):
 
     # sort + top-k results
     distances.sort(key=lambda x: x[1])
-    top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
+    top_matches = []
+    for sid, dist in distances:
+        if not math.isfinite(dist) or (top_k is not None and len(top_matches) >= top_k):
+            break
+        top_matches.append({"id": sid, "distance": float(dist)})
 
     return top_matches
 

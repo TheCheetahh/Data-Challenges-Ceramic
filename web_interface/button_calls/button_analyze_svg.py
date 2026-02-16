@@ -28,7 +28,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "smooth_factor": smooth_factor,
         "smooth_window": smooth_window,
         "n_samples": n_samples,
-        "duplicate_synonym_checkbox": duplicate_synonym_checkbox
+        "duplicate_synonym_checkbox": duplicate_synonym_checkbox,
+        "top_k" : None
     }
 
     # Get the document to check for cropped_svg
