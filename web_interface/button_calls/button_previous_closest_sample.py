@@ -96,5 +96,5 @@ def click_previous_closest_sample(distance_type_dataset, distance_value_dataset,
         typ_text,
         new_index,
         label_text,
-        f"{new_index+1} / 20"
+        f"{new_index+1} / {len(closest_list_state)}"
     )

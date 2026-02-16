@@ -3,7 +3,7 @@ from web_interface.button_calls.button_analyze_svg import click_analyze_svg
 
 
 def click_batch_analyze(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
-                        smooth_factor, smooth_window, n_samples):
+                        smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox):
     """
         called by button
         calculates all data and stores it in db for all samples
@@ -27,8 +27,8 @@ def click_batch_analyze(distance_type_dataset, distance_value_dataset, distance_
     id_list = db_handler.list_svg_ids()
     for current_sample_id in id_list:
         click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_id,
-                          smooth_method, smooth_factor, smooth_window, n_samples)
+                          smooth_method, smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox)
 
     # return values of currently selected sample in the dropdown. It is displayed after the calculation is done
     return click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation,
-                                                sample_id, smooth_method, smooth_factor, smooth_window, n_samples)
+                                                sample_id, smooth_method, smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox)

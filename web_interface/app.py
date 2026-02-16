@@ -1,13 +1,16 @@
 import gradio as gr
 
 from database_handler import MongoDBHandler
+from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
+from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_next_closest_sample import click_next_closest_sample
 from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 from web_interface.button_calls.button_batch_analyze import click_batch_analyze
+from web_interface.other_gradio_components.checkbox_synonym import update_checkbox_synonym
 from web_interface.other_gradio_components.crop_svg import change_crop_svg_dropdown, update_crop_preview
 
 css = """
@@ -87,6 +90,45 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             with gr.Row():
                 status_output_text = gr.Textbox(label="Status", interactive=False, lines=8)
 
+        with gr.Tab("Edit SVG Path"):
+            gr.Markdown("### Crop SVG Path")
+
+            crop_svg_dropdown = gr.Dropdown(
+                choices=[str(sid) for sid in db_handler.list_svg_ids()],
+                label="Select SVG to display",
+                interactive=True
+            )
+
+            crop_start = gr.Slider(
+                minimum=0.0,
+                maximum=0.5,
+                value=0.0,
+                step=0.01,
+                label="Crop start",
+                interactive=True
+            )
+
+            crop_end = gr.Slider(
+                minimum=0.51,
+                maximum=1.0,
+                value=1.0,
+                step=0.01,
+                label="Crop end",
+                interactive=True
+            )
+
+            save_cropped_svg_button = gr.Button("Save cropped svg path")
+            save_status = gr.Textbox(label="Save Status", interactive=False)
+
+            with gr.Row():
+                full_svg_display = gr.HTML(
+                    label="Full SVG"
+                )
+
+                cropped_svg_display = gr.HTML(
+                    label="Cropped Path Preview"
+                )
+
         # Tab for all analysis related tasks
         with gr.Tab("Analyse files"):
             gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nAnalysiere die SVG Dateien.")
@@ -120,7 +162,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         label="Select SVG to display"
                     )
                     with gr.Row():
-
                         analyze_button = gr.Button("Analyze SVG")
                         batch_analyse_button = gr.Button("Analyze all Samples")
 
@@ -149,10 +190,12 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         interactive=True
                     )
 
+                    duplicate_synonym_checkbox = gr.Checkbox(label=" Show all synonym results", value=False)
+
                     with gr.Row():
-                        previous_sample_button = gr.Button("<-")
+                        previous_sample_button = gr.Button("←")
                         index_display = gr.Markdown("-/-", elem_id="centered_md")
-                        next_sample_button = gr.Button("->")
+                        next_sample_button = gr.Button("→")
 
                     closest_svg_output = gr.HTML(
                         value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
@@ -160,49 +203,54 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     closest_curvature_color_output = gr.Image(label="Curvature Color Map")
                     closest_angle_plot_output = gr.Image(label="Angle Plot")
 
-        with gr.Tab("Edit SVG Path"):
-            gr.Markdown("### Crop SVG Path")
+        with gr.Tab("Synonym Rules"):
+            gr.Markdown("### Synonym Rules")
 
-            crop_svg_dropdown = gr.Dropdown(
-                choices=[str(sid) for sid in db_handler.list_svg_ids()],
-                label="Select SVG to display",
-                interactive = True
-            )
-
-            crop_start = gr.Slider(
-                minimum=0.0,
-                maximum=0.5,
-                value=0.0,
-                step=0.01,
-                label="Crop start",
-                interactive=True
-            )
-
-            crop_end = gr.Slider(
-                minimum=0.51,
-                maximum=1.0,
-                value=1.0,
-                step=0.01,
-                label="Crop end",
-                interactive=True
-            )
-
-            save_cropped_svg_button = gr.Button("Save cropped svg path")
-            save_status = gr.Textbox(label="Save Status", interactive=False)
-
+            # Add rule section
             with gr.Row():
-                full_svg_display = gr.HTML(
-                    label="Full SVG"
+                name_input = gr.Textbox(
+                    label="Sample name",
+                    placeholder="e.g. Drag.33",
+                    scale=2
                 )
-
-                cropped_svg_display = gr.HTML(
-                    label="Cropped Path Preview"
+                synonym_input = gr.Textbox(
+                    label="Synonym",
+                    placeholder="e.g. Nb.9",
+                    scale=2
                 )
+                add_button = gr.Button("Add", scale=1)
 
+            # Table section
+            synonym_table = gr.Dataframe(
+                headers=["#", "Name", "Synonym", "Created at"],  # added "#"
+                datatype=["number", "str", "str", "str"],
+                row_count=0,
+                col_count=(4, "fixed"),
+                label="Existing Rules",
+                interactive=False
+            )
+
+            # Delete section
+            selected_label = gr.Markdown("**Selected rule:** none")
+            with gr.Row():
+                delete_input = gr.Textbox(
+                    label="Synonym to delete from group",
+                    placeholder="e.g. Nb.9",
+                    scale=2
+                )
+                delete_button = gr.Button("Delete selected rule", variant="stop")
+            selected_row = gr.State(None)
+            rule_ids = gr.State([])
 
     # Button logic:
     state_svg_type_sample = gr.State("sample")
     state_svg_type_template = gr.State("template")
+
+    # On load of gradio
+    demo.load(
+        fn=lambda: load_rules(),
+        outputs=[synonym_table, rule_ids]
+    )
 
     # svg upload
     button_svg_upload.click(
@@ -227,7 +275,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     analyze_button.click(
         fn=click_analyze_svg,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, duplicate_synonym_checkbox],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
@@ -255,7 +303,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     next_sample_button.click(
         fn=click_next_closest_sample,
-        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state,
+                closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,
@@ -271,7 +320,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     previous_sample_button.click(
         fn=click_previous_closest_sample,
-        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state,
+                closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
         outputs=[
             closest_svg_output,  # svg_html
@@ -288,7 +338,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     batch_analyse_button.click(
         fn=click_batch_analyze,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, duplicate_synonym_checkbox],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
@@ -333,3 +383,28 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[save_status]
     )
 
+    add_button.click(
+        fn=click_add_rule,
+        inputs=[name_input, synonym_input],
+        outputs=[synonym_table, rule_ids]
+    )
+
+    delete_button.click(
+        fn=click_delete_rule,
+        inputs=[delete_input],
+        outputs=[synonym_table, rule_ids, selected_row, selected_label]
+    )
+
+    def select_on_row(evt: gr.SelectData):
+        return evt.index[0], f"**Selected rule:** row {evt.index[0] + 1}"
+
+    synonym_table.select(
+        fn=select_on_row,
+        outputs=[selected_row, selected_label]
+    )
+
+    """synonym_input.change(
+        fn=update_checkbox_synonym,
+        inputs=[current_sample_state, synonym_input],
+        outputs=[closest_list_state]
+    )"""
