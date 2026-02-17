@@ -1,9 +1,10 @@
 import gradio as gr
 
 from database_handler import MongoDBHandler
+from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
-from web_interface.button_calls.button_next_closest_sample import click_next_closest_sample
-from web_interface.button_calls.button_previous_closest_sample import click_previous_closest_sample
+from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample
+from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
@@ -37,6 +38,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     current_sample_state = gr.State(None)
     closest_list_state = gr.State([])
     current_index_state = gr.State(0)
+    next_index_one = gr.State(1)
+    prev_index_one = gr.State(-1)
 
     with gr.Tabs():
         # Tab for all upload related things
@@ -87,86 +90,13 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             with gr.Row():
                 status_output_text = gr.Textbox(label="Status", interactive=False, lines=8)
 
-        # Tab for all analysis related tasks
-        with gr.Tab("Analyse files"):
-            gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nAnalysiere die SVG Dateien.")
-
-            # settings for analysis
-            with gr.Row():
-                distance_type_dataset = gr.Dropdown(choices=["theory types"], value="theory types",
-                                                    label="Distanzberechnung Datensatz")
-                distance_value_dataset = gr.Dropdown(choices=["lip_aligned_angle"],
-                                                     label="Distanzberechnung Datenpunkte")
-                distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
-                                                            "Correlation Distance", "dynamic time warping",
-                                                            "integral difference"],
-                                                   label="Distanzberechnung Datensatz")
-                smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
-                                                     label="Glättungsmethode")
-                smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Glättungsfaktor")
-                smooth_window_slider = gr.Slider(3, 351, value=125, step=10, label="Glättungsfenster")
-                samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
-
-            # status box
-            with gr.Row():
-                status_output = gr.Textbox(label="Status", interactive=False)
-
-            # display analysis content
-            with gr.Row():
-                # Left column: inspected svg
-                with gr.Column(scale=1, min_width=600):
-                    svg_dropdown = gr.Dropdown(
-                        choices=[str(sid) for sid in db_handler.list_svg_ids()],
-                        label="Select SVG to display"
-                    )
-                    with gr.Row():
-
-                        analyze_button = gr.Button("Analyze SVG")
-                        batch_analyse_button = gr.Button("Analyze all Samples")
-
-                    sample_type_output = gr.Textbox(
-                        label="Sample Type",
-                        interactive=True
-                    )
-
-                    save_type_button = gr.Button("Save changes")
-
-                    svg_output = gr.HTML(
-                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
-                    )
-                    curvature_plot_output = gr.Image(label="Curvature Plot")
-                    curvature_color_output = gr.Image(label="Curvature Color Map")
-                    angle_plot_output = gr.Image(label="Angle Plot")
-
-                # Right column: closest svg
-                with gr.Column(scale=1, min_width=400):
-                    gr.Markdown("## Closest Match")
-
-                    closest_sample_id_output = gr.Textbox(label="Closest Sample ID", interactive=False)
-
-                    closest_type_output = gr.Textbox(
-                        label="Closest Sample Type",
-                        interactive=True
-                    )
-
-                    with gr.Row():
-                        previous_sample_button = gr.Button("<-")
-                        index_display = gr.Markdown("-/-", elem_id="centered_md")
-                        next_sample_button = gr.Button("->")
-
-                    closest_svg_output = gr.HTML(
-                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>")
-                    closest_curvature_plot_output = gr.Image(label="Curvature Plot")
-                    closest_curvature_color_output = gr.Image(label="Curvature Color Map")
-                    closest_angle_plot_output = gr.Image(label="Angle Plot")
-
         with gr.Tab("Edit SVG Path"):
             gr.Markdown("### Crop SVG Path")
 
             crop_svg_dropdown = gr.Dropdown(
                 choices=[str(sid) for sid in db_handler.list_svg_ids()],
                 label="Select SVG to display",
-                interactive = True
+                interactive=True
             )
 
             crop_start = gr.Slider(
@@ -199,10 +129,135 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     label="Cropped Path Preview"
                 )
 
+        # Tab for all analysis related tasks
+        with gr.Tab("Analyse files"):
+            gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nAnalysiere die SVG Dateien.")
+
+            # settings for analysis
+            with gr.Row():
+                distance_type_dataset = gr.Dropdown(choices=["theory types"], value="theory types",
+                                                    label="Distanzberechnung Datensatz")
+                distance_value_dataset = gr.Dropdown(choices=["lip_aligned_angle", "ICP"],
+                                                     label="Distanzberechnung Datenpunkte")
+                distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
+                                                            "Correlation Distance", "dynamic time warping",
+                                                            "integral difference"],
+                                                   label="Distanzberechnung Datensatz")
+                smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
+                                                     label="Glättungsmethode")
+                smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Glättungsfaktor")
+                smooth_window_slider = gr.Slider(3, 351, value=125, step=10, label="Glättungsfenster")
+                samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
+
+            # status box
+            with gr.Row():
+                status_output = gr.Textbox(label="Status", interactive=False)
+
+            # display analysis content
+            with gr.Row():
+                # Left column: inspected svg
+                with gr.Column(scale=1, min_width=600):
+                    svg_dropdown = gr.Dropdown(
+                        choices=[str(sid) for sid in db_handler.list_svg_ids()],
+                        label="Select SVG to display"
+                    )
+                    with gr.Row():
+                        analyze_button = gr.Button("Analyze SVG")
+                        batch_analyse_button = gr.Button("Analyze all Samples")
+
+                    sample_type_output = gr.Textbox(
+                        label="Sample Type",
+                        interactive=True
+                    )
+
+                    save_type_button = gr.Button("Save changes")
+
+                    svg_output = gr.HTML(
+                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
+                    )
+                    curvature_plot_output = gr.Image(label="Curvature Plot")
+                    curvature_color_output = gr.Image(label="Curvature Color Map")
+                    angle_plot_output = gr.Image(label="Angle Plot")
+
+                # Right column: closest svg
+                with gr.Column(scale=1, min_width=400):
+                    gr.Markdown("## Closest Match")
+
+                    closest_sample_id_output = gr.Textbox(label="Closest Sample ID", interactive=False)
+
+                    closest_type_output = gr.Textbox(
+                        label="Closest Sample Type",
+                        interactive=True
+                    )
+
+                    duplicate_synonym_checkbox = gr.Checkbox(label=" Show all synonym results", value=False)
+
+                    with gr.Row():
+                        previous_sample_button = gr.Button("←")
+                        index_display = gr.Markdown("-/-", elem_id="centered_md")
+                        next_sample_button = gr.Button("→")
+
+                    closest_svg_output = gr.HTML(
+                        visible=True,
+                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
+                    )
+
+                    closest_icp_output = gr.Image(
+                        label="ICP Overlap",
+                        visible=False
+                    )
+                    closest_curvature_plot_output = gr.Image(label="Curvature Plot")
+                    closest_curvature_color_output = gr.Image(label="Curvature Color Map")
+                    closest_angle_plot_output = gr.Image(label="Angle Plot")
+
+        with gr.Tab("Synonym Rules"):
+            gr.Markdown("### Synonym Rules")
+
+            # Add rule section
+            with gr.Row():
+                name_input = gr.Textbox(
+                    label="Sample name",
+                    placeholder="e.g. Drag.33",
+                    scale=2
+                )
+                synonym_input = gr.Textbox(
+                    label="Synonym",
+                    placeholder="e.g. Nb.9",
+                    scale=2
+                )
+                add_button = gr.Button("Add", scale=1)
+
+            # Table section
+            synonym_table = gr.Dataframe(
+                headers=["#", "Name", "Synonym", "Created at"],  # added "#"
+                datatype=["number", "str", "str", "str"],
+                row_count=0,
+                col_count=(4, "fixed"),
+                label="Existing Rules",
+                interactive=False
+            )
+
+            # Delete section
+            selected_label = gr.Markdown("**Selected rule:** none")
+            with gr.Row():
+                delete_input = gr.Textbox(
+                    label="Synonym to delete from group",
+                    placeholder="e.g. Nb.9",
+                    scale=2
+                )
+                delete_button = gr.Button("Delete selected rule", variant="stop")
+            selected_row = gr.State(None)
+            rule_ids = gr.State([])
 
     # Button logic:
     state_svg_type_sample = gr.State("sample")
     state_svg_type_template = gr.State("template")
+
+    # On load of gradio
+    demo.load(
+        fn=lambda: load_rules(),
+        outputs=[synonym_table, rule_ids]
+    )
 
     # svg upload
     button_svg_upload.click(
@@ -227,13 +282,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     analyze_button.click(
         fn=click_analyze_svg,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, duplicate_synonym_checkbox],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
                  angle_plot_output,
                  status_output,
                  closest_svg_output,
+                 closest_icp_output,
                  closest_curvature_plot_output,
                  closest_curvature_color_output,
                  closest_angle_plot_output,
@@ -242,7 +298,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  closest_type_output,
                  closest_list_state,
                  current_index_state,
-                 index_display
+                 index_display,
+                 current_sample_state
                  ]
     )
 
@@ -253,14 +310,17 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     )
 
     next_sample_button.click(
-        fn=click_next_closest_sample,
+        fn=click_navigate_closest_sample,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, next_index_one],
         outputs=[
-            closest_svg_output,
+            closest_svg_output,        # gr.update (SVG visible/hidden)
+            closest_icp_output,        # gr.update (ICP image visible/hidden)
+
             closest_curvature_plot_output,
             closest_curvature_color_output,
             closest_angle_plot_output,
+
             closest_type_output,
             current_index_state,
             closest_sample_id_output,
@@ -269,17 +329,20 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     )
 
     previous_sample_button.click(
-        fn=click_previous_closest_sample,
+        fn=click_navigate_closest_sample,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, prev_index_one],
         outputs=[
-            closest_svg_output,  # svg_html
-            closest_curvature_plot_output,  # plot_img
-            closest_curvature_color_output,  # color_img
-            closest_angle_plot_output,  # angle_plot_img
-            closest_type_output,  # typ_text
-            current_index_state,  # new_index
-            closest_sample_id_output,  # label_text
+            closest_svg_output,  # gr.update (SVG visible/hidden)
+            closest_icp_output,  # gr.update (ICP image visible/hidden)
+
+            closest_curvature_plot_output,
+            closest_curvature_color_output,
+            closest_angle_plot_output,
+
+            closest_type_output,
+            current_index_state,
+            closest_sample_id_output,
             index_display
         ]
     )
@@ -287,13 +350,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     batch_analyse_button.click(
         fn=click_batch_analyze,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
-                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples],
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, duplicate_synonym_checkbox],
         outputs=[svg_output,
                  curvature_plot_output,
                  curvature_color_output,
                  angle_plot_output,
                  status_output,
                  closest_svg_output,
+                 closest_icp_output,
                  closest_curvature_plot_output,
                  closest_curvature_color_output,
                  closest_angle_plot_output,
@@ -332,3 +396,28 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[save_status]
     )
 
+    add_button.click(
+        fn=click_add_rule,
+        inputs=[name_input, synonym_input],
+        outputs=[synonym_table, rule_ids]
+    )
+
+    delete_button.click(
+        fn=click_delete_rule,
+        inputs=[delete_input],
+        outputs=[synonym_table, rule_ids, selected_row, selected_label]
+    )
+
+    def select_on_row(evt: gr.SelectData):
+        return evt.index[0], f"**Selected rule:** row {evt.index[0] + 1}"
+
+    synonym_table.select(
+        fn=select_on_row,
+        outputs=[selected_row, selected_label]
+    )
+
+    """synonym_input.change(
+        fn=update_checkbox_synonym,
+        inputs=[current_sample_state, synonym_input],
+        outputs=[closest_list_state]
+    )"""

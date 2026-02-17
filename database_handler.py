@@ -257,3 +257,7 @@ class MongoDBHandler:
             {"closest_matches": 1}
         )
         return doc.get("closest_matches", []) if doc else []
+
+    def find_all(self):
+        """Return all documents in the current collection as a list."""
+        return list(self.find())

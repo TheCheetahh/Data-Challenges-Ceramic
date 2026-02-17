@@ -2,10 +2,13 @@ from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display, remove_svg_fill
 from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_items, \
     find_enhanced_closest_curvature, compute_curvature_for_one_item
+from analysis.icp import generate_icp_overlap_image
+import gradio as gr
+from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
 
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
-                      smooth_factor, smooth_window, n_samples):
+                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox):
     """
     called by button
     calculates the graph data, stores it in db and displays it
@@ -24,7 +27,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "smooth_method": smooth_method,
         "smooth_factor": smooth_factor,
         "smooth_window": smooth_window,
-        "n_samples": n_samples
+        "n_samples": n_samples,
+        "duplicate_synonym_checkbox": duplicate_synonym_checkbox,
+        "top_k" : None
     }
 
     # Get the document to check for cropped_svg
@@ -78,12 +83,27 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         db_handler.use_collection("svg_template_types")
 
         # get svg of closest match
-        closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)
-        if closest_error:
-            closest_svg_html = f"<p style='color:red;'>Error loading closest SVG: {closest_error}</p>"
+        if distance_value_dataset == "ICP":
+            closest_svg_update = gr.update(visible=False)
+
+            closest_icp_img = generate_icp_overlap_image(
+                db_handler,
+                sample_id,
+                closest_id,
+                analysis_config
+            )
+            closest_icp_update = gr.update(value=closest_icp_img, visible=True)
+
         else:
-            closest_svg_no_fill = remove_svg_fill(closest_svg_content)
-            closest_svg_html = format_svg_for_display(closest_svg_no_fill)
+            closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)
+            if closest_error:
+                html = f"<p style='color:red;'>Error loading closest SVG</p>"
+            else:
+                closest_svg_no_fill = remove_svg_fill(closest_svg_content)
+                html = format_svg_for_display(closest_svg_no_fill)
+
+            closest_svg_update = gr.update(value=html, visible=True)
+            closest_icp_update = gr.update(visible=False)
 
         # Load curvature data of closest match and generate plots
         analysis_config["sample_id"] = closest_id
@@ -96,6 +116,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_color_img = None
         closest_angle_img = None
         closest_id_text = "No closest match found"
+
+    """if duplicate_synonym_checkbox:
+        filter_synonym_matches(sample_id)"""
 
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")
@@ -114,19 +137,25 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Return all outputs
     return (
-        svg_html,  # Selected SVG (cropped if available)
-        curvature_plot_img,  # Selected curvature line plot
-        curvature_color_img,  # Selected curvature color map
-        angle_plot_img,
-        final_status_message,  # Status message for selected sample
-        closest_svg_html,  # Closest SVG
-        closest_plot_img,  # Closest curvature line plot
-        closest_color_img,  # Closest curvature color map
-        closest_angle_img,
-        closest_id_text,  # Text showing close sample ID + distance
-        sample_type,
-        closest_type,
-        closest_matches_list,  # list of closest matches
-        current_index,  # starting index is always 0
-        f"{1} / 20"
+        svg_html,                         # svg_output
+        curvature_plot_img,               # curvature_plot_output
+        curvature_color_img,              # curvature_color_output
+        angle_plot_img,                   # angle_plot_output
+        final_status_message,             # status_output
+
+        closest_svg_update,               # closest_svg_output (gr.update)
+        closest_icp_update,               # closest_icp_output (gr.update)
+
+        closest_plot_img,                 # closest_curvature_plot_output
+        closest_color_img,                # closest_curvature_color_output
+        closest_angle_img,                # closest_angle_plot_output
+
+        closest_id_text,                  # closest_sample_id_output
+        sample_type,                      # sample_type_output
+        closest_type,                     # closest_type_output
+
+        closest_matches_list,             # closest_list_state
+        current_index,                    # current_index_state
+        f"{current_index+1} / {len(closest_matches_list)}",  # index_display
+        sample_id                          # current_sample_state
     )

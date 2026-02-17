@@ -1,4 +1,5 @@
 import io
+import math
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +12,7 @@ from analysis.analyze_curvature import normalize_path, curvature_from_points
 from analysis.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
     dtw_distance, integral_difference
 from database_handler import MongoDBHandler
-
+from analysis.icp import ensure_icp_geometry, run_icp, icp_score
 
 def compute_curvature_for_all_items(analysis_config):
     """
@@ -214,6 +215,7 @@ def generate_all_plots(analysis_config):
     smooth_factor = analysis_config.get("smooth_factor")
     smooth_window = analysis_config.get("smooth_window")
     n_samples = analysis_config.get("n_samples")
+    distance_value_dataset = analysis_config.get("distance_value_dataset")
 
     # set db handler
     if distance_type_dataset == "other samples":
@@ -360,12 +362,11 @@ def generate_all_plots(analysis_config):
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
-def find_enhanced_closest_curvature(analysis_config, top_k=20):
+def find_enhanced_closest_curvature(analysis_config):
     """
     calculate close samples and save to db. return the top result
 
     :param analysis_config:
-    :param top_k:
     :return:
     """
 
@@ -373,6 +374,7 @@ def find_enhanced_closest_curvature(analysis_config, top_k=20):
     db_handler = analysis_config.get("db_handler")
     sample_id = analysis_config.get("sample_id")
     distance_type_dataset = analysis_config.get("distance_type_dataset")
+    top_k = analysis_config.get("top_k")
 
     # create db handler
     db_handler.use_collection("svg_raw")
@@ -402,6 +404,7 @@ def find_enhanced_closest_curvature(analysis_config, top_k=20):
     db_handler.collection.update_one(
         {"sample_id": sample_id},
         {"$set": {"closest_matches": top_matches,
+                  "full_closest_matches": top_matches,
                   "closest_matches_valid": True}
          }
     )
@@ -412,7 +415,7 @@ def find_enhanced_closest_curvature(analysis_config, top_k=20):
     return closest["id"], closest["distance"], msg
 
 
-def calculate_distances(analysis_config, curvature, direction, top_k=20):
+def calculate_distances(analysis_config, curvature, direction, top_k):
     """
 
     :param direction:
@@ -453,7 +456,11 @@ def calculate_distances(analysis_config, curvature, direction, top_k=20):
 
     # sort + top-k results
     distances.sort(key=lambda x: x[1])
-    top_matches = [{"id": sid, "distance": float(dist)} for sid, dist in distances[:top_k]]
+    top_matches = []
+    for sid, dist in distances:
+        if not math.isfinite(dist) or (top_k is not None and len(top_matches) >= top_k):
+            break
+        top_matches.append({"id": sid, "distance": float(dist)})
 
     return top_matches
 
@@ -558,8 +565,58 @@ def get_distance(analysis_config, oid, curvature, other_curv,
             pass
         return float(min_distance)
 
-    elif distance_value_dataset == "lip_aligned_curvature":
-        return None
+    elif distance_value_dataset == "ICP":
+        # Pairwise ICP distance between sample and template
+        db_handler = analysis_config["db_handler"]
+
+        n_target = analysis_config.get("icp_n_target", 300)
+        n_ref = analysis_config.get("icp_n_reference", 500)
+
+        icp_params = {
+            "iters": analysis_config.get("icp_iters", 30),
+            "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
+            "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
+            "top_percent": analysis_config.get("icp_top_percent", 0.2)
+        }
+
+        # --------------------------------------------------
+        # Load target geometry
+        # --------------------------------------------------
+        db_handler.use_collection("svg_raw")
+        target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+        if target_doc is None:
+            return None
+
+        target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+        target_pts = np.array(target_icp["outline_points"])
+
+        # --------------------------------------------------
+        # Load reference geometry
+        # --------------------------------------------------
+        db_handler.use_collection("svg_template_types")
+        ref_doc = db_handler.collection.find_one({"sample_id": oid})
+        if ref_doc is None:
+            return None
+
+        ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+        ref_pts = np.array(ref_icp["outline_points"])
+
+        # --------------------------------------------------
+        # Run pairwise ICP
+        # --------------------------------------------------
+        err, aligned = run_icp(
+            target_pts,
+            ref_pts,
+            iters=icp_params["iters"],
+            max_total_deg=icp_params["max_total_deg"],
+            max_scale_step=icp_params["max_scale_step"]
+        )
+
+        if not np.isfinite(err):
+            return None
+
+        score, _ = icp_score(ref_pts, aligned, ref_id=oid)
+        return float(score)
     elif distance_value_dataset == "cropped curvature":
         return float(sum([apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation)]))
     elif distance_value_dataset == "only angle":
