@@ -18,6 +18,17 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
 
+    # Default outputs
+    closest_svg_update = gr.update(visible=False)
+    closest_icp_update = gr.update(visible=False)
+
+    closest_plot_img = None
+    closest_color_img = None
+    closest_angle_img = None
+
+    closest_id_text = "No closest match found"
+    closest_type = None
+
     analysis_config = {
         "db_handler": db_handler,
         "sample_id": sample_id,
@@ -71,11 +82,70 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Find close matches. Recalculate them if curvature data was recalculated and close matches are outdated.
     # Otherwise, load the closest match from the DB
+    closest_id = None
+    distance = None
+
     if not doc or not doc.get("closest_matches_valid", False):
         closest_id, distance, closest_msg = find_enhanced_closest_curvature(analysis_config)
     else:
-        closest_id = doc["closest_matches"][0]["id"]
-        distance = doc["closest_matches"][0]["distance"]
+        matches = doc.get("closest_matches", [])
+        if matches:
+            closest_id = matches[0].get("id")
+            distance = matches[0].get("distance")
+    # --------------------------------------------------
+    # Handle ICP target failure (all distances = inf)
+    # --------------------------------------------------
+    icp_error = analysis_config.get("icp_target_error")
+
+    if distance_value_dataset == "ICP" and icp_error:
+        db_handler.use_collection("svg_raw")
+        db_handler.collection.update_one(
+            {"sample_id": sample_id},
+            {"$set": {
+                "closest_matches": [],
+                "full_closest_matches": [],
+                "closest_matches_valid": False,
+                "icp_status": f"ICP failed for target: {icp_error}"
+            }}
+        )
+
+        final_status_message = (
+            f"❌ ICP failed for target shape.\n"
+            f"Reason: {icp_error}"
+        )
+
+        return (
+            svg_html,
+            curvature_plot_img,
+            curvature_color_img,
+            angle_plot_img,
+            final_status_message,
+
+            gr.update(visible=False),
+            gr.update(visible=False),
+
+            None,
+            None,
+            None,
+
+            "No closest match (ICP failed)",
+            sample_type,
+            None,
+
+            [],
+            0,
+            "0 / 0",
+            sample_id
+        )
+    else:
+        matches = doc.get("closest_matches", [])
+
+        closest_id = None
+        distance = None
+
+        if matches:
+            closest_id = matches[0].get("id")
+            distance = matches[0].get("distance")
 
     # if there was no error and an id was found
     if closest_id is not None:
