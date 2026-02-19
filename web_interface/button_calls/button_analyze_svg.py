@@ -18,6 +18,18 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
 
+    # Default outputs
+    closest_svg_update = gr.update(visible=False)
+    closest_icp_update = gr.update(visible=False)
+
+    closest_plot_img = None
+    closest_color_img = None
+    closest_angle_img = None
+
+    closest_id_text = "No closest match found"
+    closest_type = None
+    sample_type = None
+    final_status_message = ""
     analysis_config = {
         "db_handler": db_handler,
         "sample_id": sample_id,
@@ -32,23 +44,63 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "top_k" : None
     }
 
+    analysis_config["icp_skipped_targets"] = []
+
     # Get the document to check for cropped_svg
     doc = db_handler.collection.find_one({"sample_id": sample_id})
     if not doc:
         placeholder_html = f"<p style='color:red;'>❌ No document found for sample_id: {sample_id}</p>"
         return (
-            placeholder_html, None, None, None, f"❌ No document found",
-            placeholder_html, None, None, None, "❌ No closest match"
+            placeholder_html,     # svg_output
+            None,                 # curvature_plot
+            None,                 # curvature_color
+            None,                 # angle_plot
+            "❌ No document found",# status_output
+
+            placeholder_html,     # closest_svg_output
+            None,                 # closest_icp_output
+
+            None,                 # closest_curvature_plot
+            None,                 # closest_curvature_color
+            None,                 # closest_angle_plot
+
+            "❌ No closest match", # closest_sample_id_output
+            None,                 # sample_type_output
+            None,                 # closest_type_output
+
+            [],                   # closest_list_state
+            0,                    # current_index_state
+            "0 / 0",              # index_display
+            sample_id             # current_sample_state
         )
 
     # Use cropped_svg if available, otherwise use cleaned_svg
     svg_to_display = doc.get("cropped_svg") or doc.get("cleaned_svg")
 
     if not svg_to_display:
-        placeholder_html = f"<p style='color:red;'>❌ No SVG data found</p>"
+        placeholder_html = "<p style='color:red;'>❌ No SVG data found</p>"
         return (
-            placeholder_html, None, None, None, f"❌ No SVG data found",
-            placeholder_html, None, None, None, "❌ No closest match, because there was no valid SVG"
+            placeholder_html,     # svg_output
+            None,                 # curvature_plot
+            None,                 # curvature_color
+            None,                 # angle_plot
+            "❌ No SVG data found",# status_output
+
+            placeholder_html,     # closest_svg_output
+            None,                 # closest_icp_output
+
+            None,                 # closest_curvature_plot
+            None,                 # closest_curvature_color
+            None,                 # closest_angle_plot
+
+            "❌ No closest match", # closest_sample_id_output
+            None,                 # sample_type_output
+            None,                 # closest_type_output
+
+            [],                   # closest_list_state
+            0,                    # current_index_state
+            "0 / 0",              # index_display
+            sample_id             # current_sample_state
         )
 
     # Remove fill and format the svg for display
@@ -71,11 +123,71 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Find close matches. Recalculate them if curvature data was recalculated and close matches are outdated.
     # Otherwise, load the closest match from the DB
+    closest_id = None
+    distance = None
+
     if not doc or not doc.get("closest_matches_valid", False):
         closest_id, distance, closest_msg = find_enhanced_closest_curvature(analysis_config)
+        doc = db_handler.collection.find_one({"sample_id": sample_id})
     else:
-        closest_id = doc["closest_matches"][0]["id"]
-        distance = doc["closest_matches"][0]["distance"]
+        matches = doc.get("closest_matches", [])
+        if matches:
+            closest_id = matches[0].get("id")
+            distance = matches[0].get("distance")
+    # --------------------------------------------------
+    # Handle ICP target failure (all distances = inf)
+    # --------------------------------------------------
+    icp_error = analysis_config.get("icp_target_error")
+
+    if distance_value_dataset == "ICP" and icp_error:
+        db_handler.use_collection("svg_raw")
+        db_handler.collection.update_one(
+            {"sample_id": sample_id},
+            {"$set": {
+                "closest_matches": [],
+                "full_closest_matches": [],
+                "closest_matches_valid": False,
+                "icp_status": f"ICP failed for target: {icp_error}"
+            }}
+        )
+
+        final_status_message = (
+            f"❌ ICP failed for target shape.\n"
+            f"Reason: {icp_error}"
+        )
+
+        return (
+            svg_html,
+            curvature_plot_img,
+            curvature_color_img,
+            angle_plot_img,
+            final_status_message,
+
+            gr.update(visible=False),
+            gr.update(visible=False),
+
+            None,
+            None,
+            None,
+
+            "No closest match (ICP failed)",
+            sample_type,
+            None,
+
+            [],
+            0,
+            "0 / 0",
+            sample_id
+        )
+    else:
+        matches = doc.get("closest_matches", []) if doc else []
+
+        closest_id = None
+        distance = None
+
+        if matches:
+            closest_id = matches[0].get("id")
+            distance = matches[0].get("distance")
 
     # if there was no error and an id was found
     if closest_id is not None:
@@ -131,9 +243,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Reset navigation state
     current_index = 0  # first one shown is index 0
-
-    # Combine status messages
-    final_status_message = f"{compute_status}\n{status_msg}"
 
     # Return all outputs
     return (

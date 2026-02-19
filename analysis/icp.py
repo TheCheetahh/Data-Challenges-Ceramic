@@ -585,6 +585,9 @@ def icp_score(reference_pts,
     k = max(5, int(0.15 * n))   # tail region near the end
 
     line20_pts, _ = make_points_on_target_rail(aligned_target_pts)
+    if line20_pts is None or len(line20_pts) < 2:
+        return np.inf, None
+
     line_p0 = line20_pts[0]
     line_p1 = line20_pts[-1]
 
@@ -614,7 +617,7 @@ def icp_score(reference_pts,
     )
 
     if ref_rail_count != 1:
-        print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
+        # print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
         # Reference bbox contains multiple (or zero) rails
         return np.inf, None
 
@@ -814,7 +817,7 @@ def plot_icp_overlap(
         reference_pts[:, 0],
         reference_pts[:, 1],
         s=6, color="lightgray",
-        label="Reference (full)"
+        label="Full Template"
     )
 
     # --------------------------------------------------
@@ -825,7 +828,7 @@ def plot_icp_overlap(
         ax.scatter(
             ref_box[:, 0], ref_box[:, 1],
             s=10, color="blue",
-            label="Reference (used, single rail)"
+            label="Used Template"
         )
 
     """if line100_ref is not None:
@@ -865,7 +868,7 @@ def plot_icp_overlap(
         aligned_target_pts[:, 0],
         aligned_target_pts[:, 1],
         s=8, color="orange",
-        label="Target (single rail)"
+        label="Sample"
     )
     """if line100_tgt is not None:
         ax.scatter(
@@ -901,12 +904,12 @@ def plot_icp_overlap(
     if ref_seg is not None:
         ax.plot(ref_seg[:, 0], ref_seg[:, 1],
                 color="green", linewidth=3,
-                label="Reference avg width")
+                label="Template avg width")
 
     if tgt_seg is not None:
         ax.plot(tgt_seg[:, 0], tgt_seg[:, 1],
                 color="black", linewidth=3,
-                label="Target avg width")
+                label="Sample avg width")
 
     """step = 20  # label every 20th point on 100-pt target rail
     for i in range(0, len(line100_tgt), step):
@@ -932,7 +935,14 @@ def plot_icp_overlap(
     # --------------------------------------------------
     ax.set_aspect("equal", adjustable="box")
     ax.invert_yaxis()
-    ax.legend(loc="best")
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(0.98, 0.98),
+        bbox_transform=fig.transFigure,
+        frameon=True,
+        framealpha=1.0
+    )
+
 
     buf = io.BytesIO()
     plt.tight_layout()

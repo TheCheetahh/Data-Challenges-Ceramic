@@ -566,7 +566,6 @@ def get_distance(analysis_config, oid, curvature, other_curv,
         return float(min_distance)
 
     elif distance_value_dataset == "ICP":
-        # Pairwise ICP distance between sample and template
         db_handler = analysis_config["db_handler"]
 
         n_target = analysis_config.get("icp_n_target", 300)
@@ -580,43 +579,67 @@ def get_distance(analysis_config, oid, curvature, other_curv,
         }
 
         # --------------------------------------------------
-        # Load target geometry
+        # Load target geometry (FAIL HERE = target invalid)
         # --------------------------------------------------
-        db_handler.use_collection("svg_raw")
-        target_doc = db_handler.collection.find_one({"sample_id": sample_id})
-        if target_doc is None:
-            return None
+        try:
+            db_handler.use_collection("svg_raw")
+            target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+            if target_doc is None:
+                raise ValueError("Target document not found")
 
-        target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
-        target_pts = np.array(target_icp["outline_points"])
-
-        # --------------------------------------------------
-        # Load reference geometry
-        # --------------------------------------------------
-        db_handler.use_collection("svg_template_types")
-        ref_doc = db_handler.collection.find_one({"sample_id": oid})
-        if ref_doc is None:
-            return None
-
-        ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
-        ref_pts = np.array(ref_icp["outline_points"])
+            target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+            target_pts = np.array(target_icp["outline_points"])
+        except Exception as e:
+            # Target is unsuitable for ICP → all distances = inf
+            skipped = analysis_config.setdefault("icp_skipped_targets", [])
+            skipped.append({
+                "id": oid,
+                "reason": str(e)
+            })
+            return float("inf")
 
         # --------------------------------------------------
-        # Run pairwise ICP
+        # Load reference geometry (per-template failures OK)
         # --------------------------------------------------
-        err, aligned = run_icp(
-            target_pts,
-            ref_pts,
-            iters=icp_params["iters"],
-            max_total_deg=icp_params["max_total_deg"],
-            max_scale_step=icp_params["max_scale_step"]
-        )
+        try:
+            db_handler.use_collection("svg_template_types")
+            ref_doc = db_handler.collection.find_one({"sample_id": oid})
+            if ref_doc is None:
+                return float("inf")
 
-        if not np.isfinite(err):
-            return None
+            ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+            ref_pts = np.array(ref_icp["outline_points"])
+        except Exception:
+            return float("inf")
 
-        score, _ = icp_score(ref_pts, aligned, ref_id=oid)
-        return float(score)
+        # --------------------------------------------------
+        # Run ICP + score
+        # --------------------------------------------------
+        try:
+            err, aligned = run_icp(
+                target_pts,
+                ref_pts,
+                iters=icp_params["iters"],
+                max_total_deg=icp_params["max_total_deg"],
+                max_scale_step=icp_params["max_scale_step"]
+            )
+
+            if not np.isfinite(err):
+                return float("inf")
+
+            score, _ = icp_score(ref_pts, aligned, ref_id=oid)
+            if not np.isfinite(score):
+                skipped = analysis_config.setdefault("icp_skipped_targets", [])
+                skipped.append({
+                    "id": oid,
+                    "reason": "non-finite ICP score"
+                })
+                return float("inf")
+
+            return float(score)
+
+        except Exception:
+            return float("inf")
     elif distance_value_dataset == "cropped curvature":
         return float(sum([apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation)]))
     elif distance_value_dataset == "only angle":
