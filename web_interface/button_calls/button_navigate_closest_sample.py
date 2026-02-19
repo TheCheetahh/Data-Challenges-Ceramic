@@ -1,8 +1,10 @@
-from analysis.compute_curvature_data import generate_all_plots
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display
 from analysis.icp import generate_icp_overlap_image
 import gradio as gr
+
+from web_interface.graph_generation.generate_graph import generate_graph
+
 
 def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_id, closest_list_state, closest_index_state, smooth_method, smooth_factor, smooth_window, n_samples, next_or_prev):
     """
@@ -15,10 +17,7 @@ def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset,
 
     # get a database handler
     db_handler = MongoDBHandler("svg_data")
-    if distance_type_dataset == "other samples":
-        db_handler.use_collection("svg_raw")
-    else:
-        db_handler.use_collection("svg_template_types")
+    db_handler.use_collection("svg_template_types")
 
     # If state is empty or invalid → fallback
     if not isinstance(closest_list_state, list) or len(closest_list_state) == 0:
@@ -85,7 +84,9 @@ def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset,
     }
 
     # --- load SVG + curvature plots + type text ---
-    plot_img, color_img, angle_plot_img, _ = generate_all_plots(analysis_config)
+    plot_img, _ = generate_graph(analysis_config, next_id, "template", "curvature_plot")
+    color_img, _ = generate_graph(analysis_config, next_id, "template", "curvature_color")
+    angle_plot_img, _ = generate_graph(analysis_config, next_id, "template", "angle_plot")
 
     # Load cleaned SVG of that sample id
     if distance_value_dataset == "ICP":

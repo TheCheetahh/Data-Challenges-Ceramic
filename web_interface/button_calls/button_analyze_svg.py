@@ -1,9 +1,11 @@
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display, remove_svg_fill
-from analysis.compute_curvature_data import generate_all_plots, compute_curvature_for_all_items, \
+from analysis.compute_curvature_data import compute_curvature_for_all_items, \
     get_closest_matches_list, compute_curvature_for_one_item
 from analysis.icp import generate_icp_overlap_image
 import gradio as gr
+
+from web_interface.graph_generation.generate_graph import generate_graph
 from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
 
 
@@ -22,14 +24,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     closest_svg_update = gr.update(visible=False)
     closest_icp_update = gr.update(visible=False)
 
-    closest_plot_img = None
-    closest_color_img = None
-    closest_angle_img = None
-
-    closest_id_text = "No closest match found"
-    closest_type = None
     sample_type = None
     final_status_message = ""
+
     analysis_config = {
         "db_handler": db_handler,
         "sample_id": sample_id,
@@ -41,10 +38,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "smooth_window": smooth_window,
         "n_samples": n_samples,
         "duplicate_synonym_checkbox": duplicate_synonym_checkbox,
-        "top_k" : None
+        "top_k" : None,
+        "icp_skipped_targets" : []
     }
-
-    analysis_config["icp_skipped_targets"] = []
 
     # Get the document to check for cropped_svg
     doc = db_handler.collection.find_one({"sample_id": sample_id})
@@ -117,7 +113,10 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         doc = db_handler.collection.find_one({"sample_id": sample_id})  # Reload doc after update
 
     # get all plots of current sample
-    curvature_plot_img, curvature_color_img, angle_plot_img, status_msg = generate_all_plots(analysis_config)
+    curvature_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "curvature_plot")
+    curvature_color_img, _ = generate_graph(analysis_config, sample_id, "sample", "curvature_color")
+    angle_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "angle_plot")
+
     analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
     compute_status = compute_curvature_for_all_items(analysis_config)
 
@@ -218,10 +217,11 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_icp_update = gr.update(visible=False)
 
         # Load curvature data of closest match and generate plots
-        analysis_config["sample_id"] = closest_id
-        closest_plot_img, closest_color_img, closest_angle_img, _ = generate_all_plots(analysis_config)
+        closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")
+        closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
+        closest_angle_img, _ = generate_graph(analysis_config, closest_id, "template", "angle_plot")
         closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
-        analysis_config["sample_id"] = sample_id  # reset sample id
+
     else:
         closest_svg_html = "<p>No closest match found</p>"
         closest_plot_img = None
@@ -232,17 +232,12 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     """if duplicate_synonym_checkbox:
         filter_synonym_matches(sample_id)"""
 
-    # Get the type of the sample from the database
+    # Get outputs
     db_handler.use_collection("svg_raw")
     sample_type = db_handler.get_sample_type(sample_id)
-    # Load the full list of closest matches from DB
     closest_matches_list = db_handler.get_closest_matches(sample_id)
-
     db_handler.use_collection("svg_template_types")
-    closest_type = db_handler.get_sample_type(closest_id)
-
-    # Reset navigation state
-    current_index = 0  # first one shown is index 0
+    closest_type = db_handler.get_sample_type(closest_id) # template type
 
     # Return all outputs
     return (
@@ -264,7 +259,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_type,                     # closest_type_output
 
         closest_matches_list,             # closest_list_state
-        current_index,                    # current_index_state
-        f"{current_index+1} / {len(closest_matches_list)}",  # index_display
+        0,                                # current_index_state set to 0 to reset list index in app
+        f"{1} / {len(closest_matches_list)}",  # index_display
         sample_id                          # current_sample_state
     )
