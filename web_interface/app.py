@@ -3,6 +3,7 @@ import gradio as gr
 from database_handler import MongoDBHandler
 from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
+from web_interface.button_calls.button_csv_download import click_csv_download
 from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample
 from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_pin import click_pin_button
@@ -83,6 +84,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                             # csv download
                             gr.Markdown("### CSV Download för sämples täble")
                             csv_download_button = gr.Button("Download Project CSV")
+                            csv_file_output = gr.File(label="Download", visible=True)
 
             # generate clean svg from raw svg in database
             # clean_svg_button = gr.Button("🚀 Clean SVG")
@@ -460,4 +462,12 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             pinned_curvature_color_output,
             pinned_angle_plot_output
         ]
+    )
+
+
+
+    csv_download_button.click(
+        fn=click_csv_download,
+        inputs=[],
+        outputs=[csv_file_output]
     )
