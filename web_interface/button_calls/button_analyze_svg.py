@@ -1,7 +1,8 @@
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display, remove_svg_fill
 from analysis.compute_curvature_data import compute_curvature_for_all_items, \
-    get_closest_matches_list, compute_curvature_for_one_item
+    compute_curvature_for_one_item
+from analysis.calculation.get_closest_matches_list import get_closest_matches_list
 from analysis.calculation.ipc.icp import generate_icp_overlap_image
 import gradio as gr
 
