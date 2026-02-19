@@ -9,9 +9,7 @@ from matplotlib.colors import Normalize
 from svgpathtools import svg2paths
 
 from analysis.analyze_curvature import normalize_path, curvature_from_points
-from analysis.calculation.apply_metric import apply_metric
-from analysis.calculation.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
-    dtw_distance, integral_difference
+
 from database_handler import MongoDBHandler
 from analysis.icp import ensure_icp_geometry, run_icp, icp_score
 
@@ -363,7 +361,7 @@ def generate_all_plots(analysis_config):
     return curvature_plot_img, curvature_color_img, angle_plot_img, status_msg
 
 
-def find_enhanced_closest_curvature(analysis_config):
+def get_closest_matches_list(analysis_config):
     """
     calculate close samples and save to db. return the top result
 
@@ -372,67 +370,18 @@ def find_enhanced_closest_curvature(analysis_config):
     """
 
     # set vars from analysis_config
-    db_handler = analysis_config.get("db_handler")
     sample_id = analysis_config.get("sample_id")
     top_k = analysis_config.get("top_k")
-
-    # create db handler
-    db_handler.use_collection("svg_raw")
-
-    # get the sample from db and its curvature and direction (angle)
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
-    if not doc or "curvature_data" not in doc:
-        return None, None, f"No curvature data for sample_id {sample_id}"
-
-    sample_curvature = np.array(doc["curvature_data"]["curvature"])
-    sample_direction = np.array(doc["curvature_data"]["directions"])
-
+    distance_value_dataset = analysis_config.get("distance_value_dataset")
+    db_handler = analysis_config.get("db_handler")
     db_handler.use_collection("svg_template_types")
 
     # compute distances
-    top_matches = calculate_distances(analysis_config, sample_curvature, sample_direction, top_k)
-
-    if not top_matches:
-        return None, None, "No comparable samples found."
-
-    db_handler.use_collection("svg_raw")
-
-    # save results
-    db_handler.collection.update_one(
-        {"sample_id": sample_id},
-        {"$set": {"closest_matches": top_matches,
-                  "full_closest_matches": top_matches,
-                  "closest_matches_valid": True}
-         }
-    )
-
-    closest = top_matches[0]
-    msg = f"Closest sample to {sample_id} is {closest['id']} (distance={closest['distance']:.6f})"
-
-    return closest["id"], closest["distance"], msg
-
-
-def calculate_distances(analysis_config, sample_curvature, sample_direction, top_k):
-    """
-
-    :param sample_direction:
-    :param sample_curvature:
-    :param analysis_config:
-    :param top_k:
-    :return:
-    """
-
-    # set vars from analysis_config
-    db_handler = analysis_config.get("db_handler")
-    sample_id = analysis_config.get("sample_id")
-    distance_value_dataset = analysis_config.get("distance_value_dataset")
-
     # setup distances list
     distances = []
-
     # iterate all templates, fill distances[] with results
     for template_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
-                                                {"sample_id": 1, "curvature_data": 1}):
+                                                   {"sample_id": 1, "curvature_data": 1}):
         template_id = template_doc["sample_id"]
 
         # dataset selection
@@ -441,6 +390,18 @@ def calculate_distances(analysis_config, sample_curvature, sample_direction, top
             distances.append((template_id, None))
             continue
         elif distance_value_dataset == "lip_aligned_angle":
+
+            db_handler.use_collection("svg_raw")
+
+            # get the sample from db and its curvature and direction (angle)
+            doc = db_handler.collection.find_one({"sample_id": sample_id})
+            if not doc or "curvature_data" not in doc:
+                return None, None, f"No curvature data for sample_id {sample_id}"
+
+            sample_curvature = np.array(doc["curvature_data"]["curvature"])
+            sample_direction = np.array(doc["curvature_data"]["directions"])
+
+            db_handler.use_collection("svg_template_types")
 
             curv_data = template_doc.get("curvature_data")
             if not curv_data:
@@ -635,7 +596,25 @@ def calculate_distances(analysis_config, sample_curvature, sample_direction, top
             break
         top_matches.append({"id": temp_id, "distance": float(dist)})
 
-    return top_matches
+    if not top_matches:
+        return None, None, "No comparable samples found."
+
+    db_handler.use_collection("svg_raw")
+    # save results
+    db_handler.collection.update_one(
+        {"sample_id": sample_id},
+        {"$set": {"closest_matches": top_matches,
+                  "full_closest_matches": top_matches,
+                  "closest_matches_valid": True}
+         }
+    )
+
+    closest = top_matches[0]
+    msg = f"Closest sample to {sample_id} is {closest['id']} (distance={closest['distance']:.6f})"
+
+    print(closest["id"], " ", closest["distance"])
+
+    return closest["id"], closest["distance"], msg
 
 
 def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.05):
