@@ -3,7 +3,6 @@ from web_interface.formating_functions.format_svg import format_svg_for_display,
 from analysis.compute_curvature_data import compute_curvature_for_all_items, \
     compute_curvature_for_one_item
 from analysis.calculation.get_closest_matches_list import get_closest_matches_list
-from analysis.calculation.ipc.icp import generate_icp_overlap_image
 import gradio as gr
 
 from web_interface.graph_generation.generate_graph import generate_graph
@@ -57,21 +56,27 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     svg_no_fill = remove_svg_fill(svg_to_display)
     svg_html = format_svg_for_display(svg_no_fill)
 
-    # Ensure all samples have curvature data, else compute and store it
-    # compute curvature data for selected sample and all templates
-    analysis_config["distance_type_dataset"] = "other samples"
+    if distance_value_dataset == "ICP" or distance_value_dataset == "lip_aligned_angle":
+        # Ensure all samples have curvature data, else compute and store it
+        # compute curvature data for selected sample and all templates
+        analysis_config["distance_type_dataset"] = "other samples"
 
-    # Recompute if outdated OR if closest matches are invalid
-    if doc.get("outdated_curvature", False) or not doc.get("closest_matches_valid", False):
-        compute_status = compute_curvature_for_one_item(analysis_config, sample_id)
-        doc = db_handler.collection.find_one({"sample_id": sample_id})  # Reload doc after update
+        # Recompute if outdated OR if closest matches are invalid
+        if doc.get("outdated_curvature", False) or not doc.get("closest_matches_valid", False):
+            compute_status = compute_curvature_for_one_item(analysis_config, sample_id)
+            doc = db_handler.collection.find_one({"sample_id": sample_id})  # Reload doc after update
 
-    # get all plots of current sample
-    curvature_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "curvature_plot")
-    curvature_color_img, _ = generate_graph(analysis_config, sample_id, "sample", "curvature_color")
-    angle_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "angle_plot")
-    analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
-    compute_status = compute_curvature_for_all_items(analysis_config)
+        # get all plots of current sample
+        curvature_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "curvature_plot")
+        curvature_color_img, _ = generate_graph(analysis_config, sample_id, "sample", "curvature_color")
+        angle_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "angle_plot")
+        analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
+        compute_status = compute_curvature_for_all_items(analysis_config)
+    else: # this is for keypoint
+        curvature_plot_img = None
+        curvature_color_img = None
+        angle_plot_img = None
+        compute_status = None
 
     # Find close matches. Recalculate them if curvature data was recalculated and close matches are outdated.
     # Otherwise, load the closest match from the DB
@@ -83,6 +88,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     closest_svg_output = None
     closest_icp_output = None
+    closest_icp_img = None
 
     # if there was no error and an id was found
     if closest_id is not None:
