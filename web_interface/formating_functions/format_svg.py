@@ -1,5 +1,6 @@
 from xml.etree import ElementTree as ET
 
+
 def format_svg_for_display(cleaned_svg):
     """
     Wrap the SVG in a bordered white box for display on the web page.
