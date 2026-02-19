@@ -591,7 +591,11 @@ def get_distance(analysis_config, oid, curvature, other_curv,
             target_pts = np.array(target_icp["outline_points"])
         except Exception as e:
             # Target is unsuitable for ICP → all distances = inf
-            analysis_config["icp_target_error"] = str(e)
+            skipped = analysis_config.setdefault("icp_skipped_targets", [])
+            skipped.append({
+                "id": oid,
+                "reason": str(e)
+            })
             return float("inf")
 
         # --------------------------------------------------
@@ -625,6 +629,11 @@ def get_distance(analysis_config, oid, curvature, other_curv,
 
             score, _ = icp_score(ref_pts, aligned, ref_id=oid)
             if not np.isfinite(score):
+                skipped = analysis_config.setdefault("icp_skipped_targets", [])
+                skipped.append({
+                    "id": oid,
+                    "reason": "non-finite ICP score"
+                })
                 return float("inf")
 
             return float(score)
