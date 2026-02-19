@@ -9,7 +9,8 @@ from matplotlib.colors import Normalize
 from svgpathtools import svg2paths
 
 from analysis.analyze_curvature import normalize_path, curvature_from_points
-from analysis.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
+from analysis.calculation.apply_metric import apply_metric
+from analysis.calculation.distance_methods import euclidean_distance, cosine_similarity_distance, correlation_distance, \
     dtw_distance, integral_difference
 from database_handler import MongoDBHandler
 from analysis.icp import ensure_icp_geometry, run_icp, icp_score
@@ -659,34 +660,6 @@ def get_distance(analysis_config, oid, curvature, other_curv,
         apply_metric(curvature, other_curv, distance_calculation),
         apply_metric(direction, other_dir, distance_calculation)
     ]))
-
-
-def apply_metric(a, b, distance_calculation):
-    """
-
-    :param a:
-    :param b:
-    :param distance_calculation:
-    :return:
-    """
-
-    if distance_calculation == "Euclidean Distance":
-        return euclidean_distance(a, b)
-
-    elif distance_calculation == "Cosine Similarity":
-        return cosine_similarity_distance(a, b)
-
-    elif distance_calculation == "Correlation Distance":
-        return correlation_distance(a, b)
-
-    elif distance_calculation == "dynamic time warping":
-        return dtw_distance(a, b)
-
-    elif distance_calculation == "integral difference":
-        return integral_difference(a, b)
-
-    else:
-        raise ValueError(f"Unknown distance_calculation: {distance_calculation}")
 
 
 def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.05):

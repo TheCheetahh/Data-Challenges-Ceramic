@@ -137,7 +137,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             with gr.Row():
                 distance_type_dataset = gr.Dropdown(choices=["theory types"], value="theory types",
                                                     label="Distanzberechnung Datensatz")
-                distance_value_dataset = gr.Dropdown(choices=["lip_aligned_angle", "ICP"],
+                distance_value_dataset = gr.Dropdown(choices=["ICP", "lip_aligned_angle"],
                                                      label="Distanzberechnung Datenpunkte")
                 distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
                                                             "Correlation Distance", "dynamic time warping",
