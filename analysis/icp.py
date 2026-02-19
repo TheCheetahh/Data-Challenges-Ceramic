@@ -617,7 +617,7 @@ def icp_score(reference_pts,
     )
 
     if ref_rail_count != 1:
-        print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
+        # print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
         # Reference bbox contains multiple (or zero) rails
         return np.inf, None
 
