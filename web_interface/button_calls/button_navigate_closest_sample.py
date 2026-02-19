@@ -73,7 +73,7 @@ def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset,
 
     analysis_config = {
         "db_handler": db_handler,
-        "sample_id": next_id,
+        "sample_id": current_sample_id,
         "distance_type_dataset": distance_type_dataset,
         "distance_value_dataset": distance_value_dataset,
         "distance_calculation": distance_calculation,
@@ -94,27 +94,14 @@ def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset,
         svg_update = gr.update(visible=False)
 
         # generate NEW ICP plot for the new closest sample
-        icp_img = generate_icp_overlap_image(
-            db_handler,
-            current_sample_id,   # source sample stays the same
-            next_id,             # target changes
-            analysis_config
-        )
+        icp_img , _ = generate_graph(analysis_config, next_id, "template", "overlap_plot")
         icp_update = gr.update(value=icp_img, visible=True)
 
     else:
-        # normal SVG path
-        cleaned_svg, error = db_handler.get_cleaned_svg(next_id)
-        if error:
-            svg_update = gr.update(
-                value=f"<p style='color:red;'>❌ {error}</p>",
-                visible=True
-            )
-            icp_update = gr.update(visible=False)
-        else:
-            svg_html = format_svg_for_display(cleaned_svg)
-            svg_update = gr.update(value=svg_html, visible=True)
-            icp_update = gr.update(visible=False)
+        # laa case. Gets the template svg
+        svg_html, _ = generate_graph(analysis_config, next_id, "template", "get_template")
+        svg_update = gr.update(value=svg_html, visible=True)
+        icp_update = gr.update(visible=False)
 
     typ_text = db_handler.get_sample_type(next_id)
 

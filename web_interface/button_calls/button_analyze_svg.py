@@ -89,23 +89,13 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         # Load its SVG
         db_handler.use_collection("svg_template_types")
 
-        # get svg of closest match
+        # get svg of closest match / icp overlap
         if distance_value_dataset == "ICP":
-            # Generate ICP only
-            closest_icp_img = generate_icp_overlap_image(
-                db_handler,
-                sample_id,
-                closest_id,
-                analysis_config
-            )
+            # Generate ICP overlap plot
+            closest_icp_img, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
         else:
-            # Generate SVG only
-            closest_svg_content, closest_error = db_handler.get_cleaned_svg(closest_id)
-            if closest_error:
-                closest_svg_output = "<p style='color:red;'>Error loading closest SVG</p>"
-            else:
-                closest_svg_no_fill = remove_svg_fill(closest_svg_content)
-                closest_svg_output = format_svg_for_display(closest_svg_no_fill)
+            # get template SVG (specifically for laa)
+            closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
 
         # Load curvature data of closest match and generate plots
         closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")

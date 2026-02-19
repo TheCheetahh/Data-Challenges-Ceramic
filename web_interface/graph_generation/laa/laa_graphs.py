@@ -9,6 +9,18 @@ from svgpathtools import svg2paths
 
 from analysis.analyze_curvature import normalize_path
 from database_handler import MongoDBHandler
+from web_interface.formating_functions.format_svg import remove_svg_fill, format_svg_for_display
+
+
+def laa_get_template_svg(target_id):
+
+    db_handler = MongoDBHandler("svg_data")
+    db_handler.use_collection("svg_template_types")
+
+    closest_svg_content, closest_error = db_handler.get_cleaned_svg(target_id)
+
+    closest_svg_no_fill = remove_svg_fill(closest_svg_content)
+    return format_svg_for_display(closest_svg_no_fill), f"✅ Template loaded for {target_id}"
 
 
 def laa_generate_curvature_lineplot(target_id, target_type):
