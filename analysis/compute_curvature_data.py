@@ -374,7 +374,6 @@ def find_enhanced_closest_curvature(analysis_config):
     # set vars from analysis_config
     db_handler = analysis_config.get("db_handler")
     sample_id = analysis_config.get("sample_id")
-    distance_type_dataset = analysis_config.get("distance_type_dataset")
     top_k = analysis_config.get("top_k")
 
     # create db handler
@@ -385,16 +384,13 @@ def find_enhanced_closest_curvature(analysis_config):
     if not doc or "curvature_data" not in doc:
         return None, None, f"No curvature data for sample_id {sample_id}"
 
-    curvature = np.array(doc["curvature_data"]["curvature"])
-    direction = np.array(doc["curvature_data"]["directions"])
+    sample_curvature = np.array(doc["curvature_data"]["curvature"])
+    sample_direction = np.array(doc["curvature_data"]["directions"])
 
-    if distance_type_dataset == "other samples":
-        db_handler.use_collection("svg_raw")
-    else:
-        db_handler.use_collection("svg_template_types")
+    db_handler.use_collection("svg_template_types")
 
     # compute distances
-    top_matches = calculate_distances(analysis_config, curvature, direction, top_k)
+    top_matches = calculate_distances(analysis_config, sample_curvature, sample_direction, top_k)
 
     if not top_matches:
         return None, None, "No comparable samples found."
@@ -416,11 +412,11 @@ def find_enhanced_closest_curvature(analysis_config):
     return closest["id"], closest["distance"], msg
 
 
-def calculate_distances(analysis_config, curvature, direction, top_k):
+def calculate_distances(analysis_config, sample_curvature, sample_direction, top_k):
     """
 
-    :param direction:
-    :param curvature:
+    :param sample_direction:
+    :param sample_curvature:
     :param analysis_config:
     :param top_k:
     :return:
@@ -429,237 +425,217 @@ def calculate_distances(analysis_config, curvature, direction, top_k):
     # set vars from analysis_config
     db_handler = analysis_config.get("db_handler")
     sample_id = analysis_config.get("sample_id")
+    distance_value_dataset = analysis_config.get("distance_value_dataset")
 
     # setup distances list
     distances = []
 
-    # iterate all other samples
-    for other_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
+    # iterate all templates, fill distances[] with results
+    for template_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
                                                 {"sample_id": 1, "curvature_data": 1}):
-        oid = other_doc["sample_id"]
-        curv_data = other_doc.get("curvature_data")
-        if not curv_data:
+        template_id = template_doc["sample_id"]
+
+        # dataset selection
+        # Marco code placeholder
+        if distance_value_dataset == "Keypoints":
+            distances.append((template_id, None))
             continue
+        elif distance_value_dataset == "lip_aligned_angle":
 
-        # get other samples data
-        other_curv = np.array(curv_data["curvature"])
-        other_dir = np.array(curv_data["directions"])
+            curv_data = template_doc.get("curvature_data")
+            if not curv_data:
+                continue
 
-        # get distance list from select_arrays (already calculated)
-        dist = get_distance(analysis_config, oid, curvature, other_curv,
-                            direction, other_dir)
+            # get other samples data
+            template_curvature = np.array(curv_data["curvature"])
+            template_direction = np.array(curv_data["directions"])
 
-        distances.append((oid, dist))
+            # get amount of elements in the cropped 10%
+            curve_len = len(sample_curvature)
+            crop = int(curve_len * 0.10)
+            if curve_len <= 2 * crop:
+                distances.append((template_id, None))
+                continue
 
-    # if no results
-    if not distances:
-        return []
+            n_samples = analysis_config.get("n_samples")
+            # validate arrays
+            if sample_direction is None:
+                distances.append((template_id, None))
+                continue
+            n_shard = len(sample_direction)
+            if n_shard < 20:
+                distances.append((template_id, None))
+                continue
 
-    # sort + top-k results
-    distances.sort(key=lambda x: x[1])
-    top_matches = []
-    for sid, dist in distances:
-        if not math.isfinite(dist) or (top_k is not None and len(top_matches) >= top_k):
-            break
-        top_matches.append({"id": sid, "distance": float(dist)})
+            # Convert sample directions to degrees in [-180, 180]
+            direction_deg = np.degrees(sample_direction)
+            direction_deg = ((direction_deg + 180) % 360) - 180
 
-    return top_matches
+            # Find candidates zero-crossings for the shard
+            shard_candidates = find_all_lip_index_by_angle(sample_direction)
+            if len(shard_candidates) == 0:
+                print("No shard candidates found")
+                distances.append((template_id, None))
+                continue
 
-
-def get_distance(analysis_config, oid, curvature, other_curv,
-                 direction, other_dir):
-    """
-    Compute distance between shard and template using different methods.
-    """
-
-    # set vars from analysis_config
-    sample_id = analysis_config.get("sample_id")
-    distance_value_dataset = analysis_config.get("distance_value_dataset")
-    distance_calculation = analysis_config.get("distance_calculation")
-
-    # get amount of elements in the cropped 10%
-    curve_len = len(curvature)
-    crop = int(curve_len * 0.10)
-    if curve_len <= 2 * crop:
-        return None
-
-    # dataset selection
-    if distance_value_dataset == "only curvature":
-
-        return float(sum([apply_metric(curvature, other_curv, distance_calculation)]))
-
-    elif distance_value_dataset == "lip_aligned_angle":
-
-        n_samples = analysis_config.get("n_samples")
-        # validate arrays
-        if direction is None:
-            return None
-        n_shard = len(direction)
-        if n_shard < 20:
-            return None
-
-        # Convert sample directions to degrees in [-180, 180]
-        direction_deg = np.degrees(direction)
-        direction_deg = ((direction_deg + 180) % 360) - 180
-
-        # Find candidates zero-crossings for the shard
-        shard_candidates = find_all_lip_index_by_angle(direction)
-        if len(shard_candidates) == 0:
-            print("No shard candidates found")
-            return None
-
-        # Load template SVG from DB
-        db_handler = MongoDBHandler("svg_data")
-        db_handler.use_collection("svg_template_types")
-        template_doc = db_handler.collection.find_one({"sample_id": oid})
-        if template_doc is None or "raw_content" not in template_doc:
-            return None
-        raw_template_svg = io.StringIO(template_doc["raw_content"])
-        paths, _ = svg2paths(raw_template_svg)
-        if len(paths) == 0:
-            return None
-        path_template = paths[0]
-
-        # Ternary search over n_resample
-        min_distance = np.inf
-        best_dir_aligned_crop = None
-        best_shard_candidate = None
-        best_template_candidate = None
-
-        left = n_samples  # start from usual n_samples
-        right = 20000  # maximum resample
-
-        while left < right:
-
-            mid1 = left + (right - left) // 3
-            mid2 = left + 2 * (right - left) // 3
-            dist1, crop1, shard1, temp1 = compute_distance_for_resample(
-                path_template, shard_candidates, direction_deg, n_shard, mid1
-            )
-            dist2, crop2, shard2, temp2 = compute_distance_for_resample(
-                path_template, shard_candidates, direction_deg, n_shard, mid2
-            )
-
-            # Shrink search interval
-            if dist1 < dist2:
-                right = mid2 - 1
-            else:
-                left = mid1 + 1
-
-            # Track overall minimum
-            if dist1 < min_distance:
-                min_distance = dist1
-                best_dir_aligned_crop = crop1
-                best_shard_candidate = shard1
-                best_template_candidate = temp1
-            if dist2 < min_distance:
-                min_distance = dist2
-                best_dir_aligned_crop = crop2
-                best_shard_candidate = shard2
-                best_template_candidate = temp2
-
-        if not np.isfinite(min_distance):
-            return None
-
-        if best_dir_aligned_crop is not None:
-            # print("Debug: theory calc")
-            pass
-        return float(min_distance)
-
-    elif distance_value_dataset == "ICP":
-        db_handler = analysis_config["db_handler"]
-
-        n_target = analysis_config.get("icp_n_target", 300)
-        n_ref = analysis_config.get("icp_n_reference", 500)
-
-        icp_params = {
-            "iters": analysis_config.get("icp_iters", 30),
-            "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
-            "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
-            "top_percent": analysis_config.get("icp_top_percent", 0.2)
-        }
-
-        # --------------------------------------------------
-        # Load target geometry (FAIL HERE = target invalid)
-        # --------------------------------------------------
-        try:
-            db_handler.use_collection("svg_raw")
-            target_doc = db_handler.collection.find_one({"sample_id": sample_id})
-            if target_doc is None:
-                raise ValueError("Target document not found")
-
-            target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
-            target_pts = np.array(target_icp["outline_points"])
-        except Exception as e:
-            # Target is unsuitable for ICP → all distances = inf
-            skipped = analysis_config.setdefault("icp_skipped_targets", [])
-            skipped.append({
-                "id": oid,
-                "reason": str(e)
-            })
-            return float("inf")
-
-        # --------------------------------------------------
-        # Load reference geometry (per-template failures OK)
-        # --------------------------------------------------
-        try:
+            # Load template SVG from DB
+            db_handler = MongoDBHandler("svg_data")
             db_handler.use_collection("svg_template_types")
-            ref_doc = db_handler.collection.find_one({"sample_id": oid})
-            if ref_doc is None:
-                return float("inf")
+            template_doc = db_handler.collection.find_one({"sample_id": template_id})
+            if template_doc is None or "raw_content" not in template_doc:
+                distances.append((template_id, None))
+                continue
+            raw_template_svg = io.StringIO(template_doc["raw_content"])
+            paths, _ = svg2paths(raw_template_svg)
+            if len(paths) == 0:
+                distances.append((template_id, None))
+                continue
+            path_template = paths[0]
 
-            ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
-            ref_pts = np.array(ref_icp["outline_points"])
-        except Exception:
-            return float("inf")
+            # Ternary search over n_resample
+            min_distance = np.inf
+            best_dir_aligned_crop = None
+            best_shard_candidate = None
+            best_template_candidate = None
 
-        # --------------------------------------------------
-        # Run ICP + score
-        # --------------------------------------------------
-        try:
-            err, aligned = run_icp(
-                target_pts,
-                ref_pts,
-                iters=icp_params["iters"],
-                max_total_deg=icp_params["max_total_deg"],
-                max_scale_step=icp_params["max_scale_step"]
-            )
+            left = n_samples  # start from usual n_samples
+            right = 20000  # maximum resample
 
-            if not np.isfinite(err):
-                return float("inf")
+            while left < right:
 
-            score, _ = icp_score(ref_pts, aligned, ref_id=oid)
-            if not np.isfinite(score):
+                mid1 = left + (right - left) // 3
+                mid2 = left + 2 * (right - left) // 3
+                dist1, crop1, shard1, temp1 = compute_distance_for_resample(
+                    path_template, shard_candidates, direction_deg, n_shard, mid1
+                )
+                dist2, crop2, shard2, temp2 = compute_distance_for_resample(
+                    path_template, shard_candidates, direction_deg, n_shard, mid2
+                )
+
+                # Shrink search interval
+                if dist1 < dist2:
+                    right = mid2 - 1
+                else:
+                    left = mid1 + 1
+
+                # Track overall minimum
+                if dist1 < min_distance:
+                    min_distance = dist1
+                    best_dir_aligned_crop = crop1
+                    best_shard_candidate = shard1
+                    best_template_candidate = temp1
+                if dist2 < min_distance:
+                    min_distance = dist2
+                    best_dir_aligned_crop = crop2
+                    best_shard_candidate = shard2
+                    best_template_candidate = temp2
+
+            if not np.isfinite(min_distance):
+                distances.append((template_id, None))
+                continue
+
+            if best_dir_aligned_crop is not None:
+                # print("Debug: theory calc")
+                pass
+            distances.append((template_id, float(min_distance)))
+            continue
+        elif distance_value_dataset == "ICP":
+            db_handler = analysis_config["db_handler"]
+
+            n_target = analysis_config.get("icp_n_target", 300)
+            n_ref = analysis_config.get("icp_n_reference", 500)
+
+            icp_params = {
+                "iters": analysis_config.get("icp_iters", 30),
+                "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
+                "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
+                "top_percent": analysis_config.get("icp_top_percent", 0.2)
+            }
+
+            # --------------------------------------------------
+            # Load target geometry (FAIL HERE = target invalid)
+            # --------------------------------------------------
+            try:
+                db_handler.use_collection("svg_raw")
+                target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+                if target_doc is None:
+                    raise ValueError("Target document not found")
+
+                target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+                target_pts = np.array(target_icp["outline_points"])
+            except Exception as e:
+                # Target is unsuitable for ICP → all distances = inf
                 skipped = analysis_config.setdefault("icp_skipped_targets", [])
                 skipped.append({
-                    "id": oid,
-                    "reason": "non-finite ICP score"
+                    "id": template_id,
+                    "reason": str(e)
                 })
-                return float("inf")
+                distances.append((template_id, float("inf")))
+                continue
 
-            return float(score)
+            # --------------------------------------------------
+            # Load reference geometry (per-template failures OK)
+            # --------------------------------------------------
+            try:
+                db_handler.use_collection("svg_template_types")
+                ref_doc = db_handler.collection.find_one({"sample_id": template_id})
+                if ref_doc is None:
+                    distances.append((template_id, float("inf")))
+                    continue
 
-        except Exception:
-            return float("inf")
-    elif distance_value_dataset == "cropped curvature":
-        return float(sum([apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation)]))
-    elif distance_value_dataset == "only angle":
-        return float(sum([apply_metric(direction, other_dir, distance_calculation)]))
-    elif distance_value_dataset == "cropped angle":
-        return float(sum([apply_metric(direction[crop:-crop], other_dir[crop:-crop], distance_calculation)]))
-    elif distance_value_dataset == "cropped curvature and angle":
-        return float(sum([
-            apply_metric(curvature[crop:-crop], other_curv[crop:-crop], distance_calculation),
-            apply_metric(direction[crop:-crop], other_dir[crop:-crop], distance_calculation)
-        ]))
+                ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+                ref_pts = np.array(ref_icp["outline_points"])
+            except Exception:
+                distances.append((template_id, float("inf")))
+                continue
 
-    print("Calculating fallback: full curvature + full angle...")
+            # --------------------------------------------------
+            # Run ICP + score
+            # --------------------------------------------------
+            try:
+                err, aligned = run_icp(
+                    target_pts,
+                    ref_pts,
+                    iters=icp_params["iters"],
+                    max_total_deg=icp_params["max_total_deg"],
+                    max_scale_step=icp_params["max_scale_step"]
+                )
 
-    # default fallback: full curvature + full angle
-    return float(sum([
-        apply_metric(curvature, other_curv, distance_calculation),
-        apply_metric(direction, other_dir, distance_calculation)
-    ]))
+                if not np.isfinite(err):
+                    distances.append((template_id, float("inf")))
+                    continue
+
+                score, _ = icp_score(ref_pts, aligned, ref_id=template_id)
+                if not np.isfinite(score):
+                    skipped = analysis_config.setdefault("icp_skipped_targets", [])
+                    skipped.append({
+                        "id": template_id,
+                        "reason": "non-finite ICP score"
+                    })
+                    distances.append((template_id, float("inf")))
+                    continue
+
+                distances.append((template_id, float(score)))
+                continue
+
+            except Exception:
+                distances.append((template_id, float("inf")))
+                continue
+        else:
+            print("invalid distance_value_dataset")
+            distances.append((template_id, None))
+            continue
+
+    # sort
+    distances.sort(key=lambda x: x[1])
+    # populate top results. Leave out inf and anything beyond top_k
+    top_matches = []
+    for temp_id, dist in distances:
+        if not math.isfinite(dist) or (top_k is not None and len(top_matches) >= top_k):
+            break
+        top_matches.append({"id": temp_id, "distance": float(dist)})
+
+    return top_matches
 
 
 def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.05):
