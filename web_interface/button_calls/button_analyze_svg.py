@@ -2,11 +2,10 @@ from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display, remove_svg_fill
 from analysis.compute_curvature_data import compute_curvature_for_all_items, \
     get_closest_matches_list, compute_curvature_for_one_item
-from analysis.icp import generate_icp_overlap_image
+from analysis.calculation.ipc.icp import generate_icp_overlap_image
 import gradio as gr
 
 from web_interface.graph_generation.generate_graph import generate_graph
-from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
 
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
