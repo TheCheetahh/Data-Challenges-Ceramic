@@ -460,11 +460,11 @@ def order_points_by_arclength(pts, k=6):
     _ORDER_CACHE[key] = ordered
     return ordered
 
-def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1):
+def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1, target_pts):
     """
     Returns a polygon (Nx2 array) representing the bbox
     clipped by the rail line p0→p1.
-    The kept side is chosen automatically.
+    The kept side is chosen so that the TARGET rail stays inside.
     """
 
     rect = np.array([
@@ -474,16 +474,16 @@ def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1):
         [bbox_min[0], bbox_max[1]],
     ])
 
-    # --- line normal test ---
     v = p1 - p0
 
     def signed_side(pt):
         w = pt - p0
         return v[0] * w[1] - v[1] * w[0]
 
-    # Decide which side to keep using bbox center
-    center = 0.5 * (bbox_min + bbox_max)
-    keep_positive = signed_side(center) >= 0
+
+    # decide side using target rail points
+    target_signs = signed_side(target_pts)
+    keep_positive = np.mean(target_signs) >= 0
 
     def inside(pt):
         return (signed_side(pt) >= 0) == keep_positive
@@ -515,7 +515,6 @@ def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1):
                 clipped.append(inter)
 
     return np.array(clipped)
-
 
 def icp_score(reference_pts,
               aligned_target_pts,
@@ -595,7 +594,8 @@ def icp_score(reference_pts,
         bbox_min,
         bbox_max,
         line_p0,
-        line_p1
+        line_p1,
+        aligned_target_pts
     )
 
     from matplotlib.path import Path as Pathh
