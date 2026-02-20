@@ -179,12 +179,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
                     save_type_button = gr.Button("Save changes")
 
-                    svg_output = gr.HTML(
-                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
-                    )
-                    curvature_plot_output = gr.Image(label="Curvature Plot")
-                    curvature_color_output = gr.Image(label="Curvature Color Map")
-                    angle_plot_output = gr.Image(label="Angle Plot")
+
 
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Pinned Match")
@@ -200,18 +195,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         pin_button = gr.Button("Pin Match")
                         pinned_index_display = gr.Markdown("-", elem_id="centered_md")
 
-                    pinned_svg_output = gr.HTML(
-                        visible=True,
-                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
-                    )
 
-                    pinned_icp_output = gr.Image(
-                        label="ICP Overlap",
-                        visible=False
-                    )
-                    pinned_curvature_plot_output = gr.Image(label="Curvature Plot")
-                    pinned_curvature_color_output = gr.Image(label="Curvature Color Map")
-                    pinned_angle_plot_output = gr.Image(label="Angle Plot")
 
                 # Right column: closest svg
                 with gr.Column(scale=1, min_width=400):
@@ -231,6 +215,32 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         index_display = gr.Markdown("-/-", elem_id="centered_md")
                         next_sample_button = gr.Button("→")
 
+            with gr.Row():
+                # Left column: inspected svg
+                with gr.Column(scale=1, min_width=400):
+                    svg_output = gr.HTML(
+                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
+                    )
+                    curvature_plot_output = gr.Image(label="Curvature Plot")
+                    curvature_color_output = gr.Image(label="Curvature Color Map")
+                    angle_plot_output = gr.Image(label="Angle Plot")
+
+                with gr.Column(scale=1, min_width=400):
+                    pinned_svg_output = gr.HTML(
+                        visible=True,
+                        value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
+                    )
+
+                    pinned_icp_output = gr.Image(
+                        label="ICP Overlap",
+                        visible=False
+                    )
+                    pinned_curvature_plot_output = gr.Image(label="Curvature Plot")
+                    pinned_curvature_color_output = gr.Image(label="Curvature Color Map")
+                    pinned_angle_plot_output = gr.Image(label="Angle Plot")
+
+                # right column
+                with gr.Column(scale=1, min_width=400):
                     closest_svg_output = gr.HTML(
                         visible=False,
                         value="<div style='width:500px; height:500px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center;'>SVG will appear here</div>"
