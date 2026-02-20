@@ -134,32 +134,36 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
         # Tab for all analysis related tasks
         with gr.Tab("Analyse files"):
-            gr.Markdown("## 🌀 SVG-Krümmungsanalyse\nAnalysiere die SVG Dateien.")
+            gr.Markdown("## 🌀 Sample Analysis")
 
             # settings for analysis
             with gr.Row():
-                distance_type_dataset = gr.Dropdown(choices=["theory types"], value="theory types",
-                                                    label="Distanzberechnung Datensatz")
-                distance_value_dataset = gr.Dropdown(choices=["ICP", "lip_aligned_angle", "Keypoints"],
-                                                     label="Distanzberechnung Datenpunkte")
-                distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
-                                                            "Correlation Distance",
-                                                            "integral difference"],
-                                                   label="Distanzberechnung Datensatz")
-                smooth_method_dropdown = gr.Dropdown(choices=["savgol", "gauss", "bspline", "none"], value="savgol",
-                                                     label="Glättungsmethode")
-                smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Glättungsfaktor")
-                smooth_window_slider = gr.Slider(3, 351, value=125, step=10, label="Glättungsfenster")
-                samples = gr.Slider(200, 5000, value=1000, step=100, label="Anzahl Abtastpunkte")
+                with gr.Accordion("Settings", open=False):
+                    distance_type_dataset = gr.State("theory types")
+                    """distance_type_dataset = gr.Dropdown(choices=["theory types"], value="theory types",
+                                                        label="Distanzberechnung Datensatz")"""
+                    distance_value_dataset = gr.Dropdown(choices=["ICP", "lip_aligned_angle", "Keypoints"],
+                                                         label="Calculation Algorithm")
+                    distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
+                                                                "Correlation Distance",
+                                                                "integral difference"],
+                                                       label="Distance Metric (currently not implemented)")
+                    # "gauss", "bspline", "none"
+                    smooth_method_dropdown = gr.Dropdown(choices=["savgol"], value="savgol",
+                                                         label="Smoothing Method")
+                    smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Smoothing Factor (default: 3)")
+                    smooth_window_slider = gr.Slider(3, 351, value=125, step=10, label="Smoothing Window (default: 125)")
+                    samples = gr.Slider(200, 5000, value=800, step=100, label="Number of Datapoints (default: 800) HIGH VALUES INCREASE CALCULATION TIME BY A LOT")
 
             # status box
             with gr.Row():
-                status_output = gr.Textbox(label="Status", interactive=False)
+                status_output = gr.Textbox(label="Calculation Status", interactive=False)
 
             # display analysis content
             with gr.Row():
                 # Left column: inspected svg
-                with gr.Column(scale=1, min_width=600):
+                with gr.Column(scale=1, min_width=400):
+                    gr.Markdown("## Current Sample")
                     svg_dropdown = gr.Dropdown(
                         choices=[str(sid) for sid in db_handler.list_svg_ids()],
                         label="Select SVG to display"
