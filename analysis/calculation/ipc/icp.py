@@ -460,11 +460,11 @@ def order_points_by_arclength(pts, k=6):
     _ORDER_CACHE[key] = ordered
     return ordered
 
-def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1):
+def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1, target_pts):
     """
     Returns a polygon (Nx2 array) representing the bbox
     clipped by the rail line p0→p1.
-    The kept side is chosen automatically.
+    The kept side is chosen so that the TARGET rail stays inside.
     """
 
     rect = np.array([
@@ -474,16 +474,16 @@ def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1):
         [bbox_min[0], bbox_max[1]],
     ])
 
-    # --- line normal test ---
     v = p1 - p0
 
     def signed_side(pt):
         w = pt - p0
         return v[0] * w[1] - v[1] * w[0]
 
-    # Decide which side to keep using bbox center
-    center = 0.5 * (bbox_min + bbox_max)
-    keep_positive = signed_side(center) >= 0
+
+    # decide side using target rail points
+    target_signs = signed_side(target_pts)
+    keep_positive = np.mean(target_signs) >= 0
 
     def inside(pt):
         return (signed_side(pt) >= 0) == keep_positive
@@ -515,7 +515,6 @@ def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1):
                 clipped.append(inter)
 
     return np.array(clipped)
-
 
 def icp_score(reference_pts,
               aligned_target_pts,
@@ -595,7 +594,8 @@ def icp_score(reference_pts,
         bbox_min,
         bbox_max,
         line_p0,
-        line_p1
+        line_p1,
+        aligned_target_pts
     )
 
     from matplotlib.path import Path as Pathh
@@ -617,7 +617,7 @@ def icp_score(reference_pts,
     )
 
     if ref_rail_count != 1:
-        # print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
+        print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
         # Reference bbox contains multiple (or zero) rails
         return np.inf, None
 
@@ -734,8 +734,8 @@ def make_points_on_target_rail(target_pts, n_points=100):
 
 def make_points_on_reference_rail(reference_pts, bbox_poly, n_points=100):
     """
-    Sample n_points along the reference rail,
-    restricted to points inside bbox_poly.
+    Sample exactly n_points along the reference rail
+    inside bbox_poly using arclength interpolation.
     """
 
     from matplotlib.path import Path as Pathh
@@ -744,16 +744,28 @@ def make_points_on_reference_rail(reference_pts, bbox_poly, n_points=100):
     inside = bbox_path.contains_points(reference_pts)
     ref_inside = reference_pts[inside]
 
-    if len(ref_inside) < n_points:
+    # Need at least a minimal polyline
+    if len(ref_inside) < 5:
         return None, None
 
     ordered = order_points_by_arclength(ref_inside)
 
-    idx = np.linspace(0, len(ordered) - 1, n_points).astype(int)
-    line_pts = ordered[idx]
+    # --- arclength parameterization ---
+    diffs = np.diff(ordered, axis=0)
+    seglen = np.linalg.norm(diffs, axis=1)
+    s = np.concatenate([[0.0], np.cumsum(seglen)])
 
-    return line_pts, idx
+    total_len = s[-1]
+    if total_len <= 1e-8:
+        return None, None
 
+    s_new = np.linspace(0.0, total_len, n_points)
+
+    x = np.interp(s_new, s, ordered[:, 0])
+    y = np.interp(s_new, s, ordered[:, 1])
+
+    line_pts = np.column_stack([x, y])
+    return line_pts, np.arange(n_points)
 def extend_line(p0, p1, scale=1000.0):
     """
     Extend line p0→p1 in both directions by a large factor.
