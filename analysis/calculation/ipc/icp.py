@@ -134,7 +134,7 @@ def rail_aware_correspondences(src, dst):
 def run_icp(source_pts, target_pts,
             iters=30,
             max_total_deg=2.0,
-            max_scale_step=0.002):
+            max_scale_step=0.02):
 
     src = source_pts.copy()
     dst = target_pts.copy()
@@ -293,16 +293,14 @@ def adjust_bbox_to_include_split_rails(reference_pts, bbox_min, bbox_max,
             bbox_max = np.maximum(bbox_max, rail_pts.max(axis=0))
 
     return bbox_min, bbox_max
-
+"""
 def find_icp_matches(
     target_pts,
     reference_dict,
     icp_params,
     top_k=20
 ):
-    """
     reference_dict: { sample_id: reference_pts }
-    """
     _clear_icp_caches()
     results = []
 
@@ -328,6 +326,7 @@ def find_icp_matches(
         for rid, score, aligned, bbox in results
         # for rid, score, aligned, bbox in results[:top_k]
     ]
+"""
 
 def discrete_curvature(pts):
     """
@@ -528,9 +527,6 @@ def icp_score(reference_pts,
     Always returns:
         (score, bbox)   or   (np.inf, None)
     """
-    if False:
-        print("\n--- ICP SCORE DEBUG ---")
-        print("Template:", ref_id)
     # --------------------------------------------------
     # Basic safety checks
     # --------------------------------------------------
@@ -617,12 +613,12 @@ def icp_score(reference_pts,
     )
 
     if ref_rail_count != 1:
-        print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
+        # print(f"[{ref_id}] Reference rails in bbox:", ref_rail_count)
         # Reference bbox contains multiple (or zero) rails
         return np.inf, None
 
     if len(ref_box) < 20:
-        print(f"[{ref_id}] Reject: ref_box too small:", len(ref_box))
+        # print(f"[{ref_id}] Reject: ref_box too small:", len(ref_box))
         return np.inf, None
 
     # --------------------------------------------------
@@ -1046,7 +1042,7 @@ def ensure_icp_geometry(doc, db_handler, n_points):
     return icp_data
 
 
-def find_icp_closest_matches(analysis_config, top_k=20):
+"""def find_icp_closest_matches(analysis_config, top_k=20):
     db_handler = analysis_config["db_handler"]
     sample_id = analysis_config["sample_id"]
 
@@ -1096,6 +1092,7 @@ def find_icp_closest_matches(analysis_config, top_k=20):
         }}
     )
     return matches
+"""
 
 def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_config):
     n_target = analysis_config.get("icp_n_target", 300)
