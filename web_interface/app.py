@@ -155,6 +155,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     smooth_factor = gr.Slider(0, 5, value=3, step=0.1, label="Smoothing Factor (default: 3)")
                     smooth_window_slider = gr.Slider(3, 351, value=125, step=10, label="Smoothing Window (default: 125)")
                     samples = gr.Slider(200, 5000, value=800, step=100, label="Number of Datapoints (default: 800) HIGH VALUES INCREASE CALCULATION TIME BY A LOT")
+                    duplicate_synonym_checkbox = gr.Checkbox(label=" Show only first result of all synonym groups",
+                                                             value=False)
 
             # status box
             with gr.Row():
@@ -162,27 +164,25 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
             # display analysis content
             with gr.Row():
+
                 # Left column: inspected svg
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Current Sample")
+
                     svg_dropdown = gr.Dropdown(
                         choices=[str(sid) for sid in db_handler.list_svg_ids()],
                         label="Select SVG to analyze (after a change in selection you must press analyze svg)"
                     )
-                    duplicate_synonym_checkbox = gr.Checkbox(label=" Show only first result of all synonym groups",
-                                                             value=False)
-                    with gr.Row():
-                        analyze_button = gr.Button("Analyze SVG")
-                        batch_analyse_button = gr.Button("Analyze all Samples")
 
                     sample_type_output = gr.Textbox(
                         label="Sample Type",
                         interactive=True
                     )
 
-                    save_type_button = gr.Button("Save sample type to database")
-
-
+                    with gr.Row():
+                        batch_analyse_button = gr.Button("Analyze all Samples", variant="stop")
+                        save_type_button = gr.Button("Save sample type")
+                        analyze_button = gr.Button("Analyze SVG")
 
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Pinned Match")
@@ -191,16 +191,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     pinned_sample_id_output = gr.Textbox(label="Pinned Sample ID", interactive=False)
 
                     # change this to synonym group
-                    pinned_type_output = gr.Textbox(
+                    pinned_synonyme_output = gr.Textbox(
                         label="Synonymes",
                         interactive=True
                     )
 
                     with gr.Row():
-                        pin_button = gr.Button("Pin Match")
                         pinned_index_display = gr.Markdown("-", elem_id="centered_md")
-
-
+                        pin_button = gr.Button("Pin Match")
 
                 # Right column: closest svg
                 with gr.Column(scale=1, min_width=400):
@@ -374,7 +372,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_curvature_color_output,
         pinned_angle_plot_output,
         pinned_sample_id_output,
-        pinned_type_output,
+        pinned_synonyme_output,
             pinned_index_display
     ]
     )
@@ -463,7 +461,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_curvature_color_output,
         pinned_angle_plot_output,
         pinned_sample_id_output,
-        pinned_type_output,
+        pinned_synonyme_output,
             pinned_index_display
     ]
     )
@@ -539,7 +537,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             pinned_curvature_color_output,
             pinned_angle_plot_output,
             pinned_sample_id_output,
-            pinned_type_output,
+            pinned_synonyme_output,
             pinned_index_display
         ]
     )
