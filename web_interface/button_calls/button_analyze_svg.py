@@ -33,7 +33,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "top_k" : None
     }
 
-    # Get the document to check for cropped_svg
+    # Get the document
     doc = db_handler.collection.find_one({"sample_id": sample_id})
     if not doc:
         placeholder_html = f"<p style='color:red;'>❌ No document found for sample_id: {sample_id}</p>"
@@ -41,7 +41,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             placeholder_html, None, None, None, f"❌ No document found",
             placeholder_html, None, None, None, "❌ No closest match"
         )
-
     # Use cropped_svg if available, otherwise use cleaned_svg
     svg_to_display = doc.get("cropped_svg") or doc.get("cleaned_svg")
 
@@ -56,9 +55,9 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     svg_no_fill = remove_svg_fill(svg_to_display)
     svg_html = format_svg_for_display(svg_no_fill)
 
+    # compute curvature data for selected sample and all templates only in some calculations
     if distance_value_dataset == "ICP" or distance_value_dataset == "lip_aligned_angle":
         # Ensure all samples have curvature data, else compute and store it
-        # compute curvature data for selected sample and all templates
         analysis_config["distance_type_dataset"] = "other samples"
 
         # Recompute if outdated OR if closest matches are invalid
@@ -96,19 +95,24 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         db_handler.use_collection("svg_template_types")
 
         # get svg of closest match / icp overlap
-        if distance_value_dataset == "ICP":
+        if distance_value_dataset == "ICP" or distance_value_dataset == "lip_aligned_angle":
             # Generate ICP overlap plot
-            closest_icp_img, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
-        else:
-            # get template SVG (specifically for laa)
-            closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
-
-        # Load curvature data of closest match and generate plots
-        closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")
-        closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
-        closest_angle_img, _ = generate_graph(analysis_config, closest_id, "template", "angle_plot")
-        closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
-    else:
+            if distance_value_dataset == "ICP":
+                closest_icp_img, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
+            else: # laa
+                # get template SVG (specifically for laa)
+                closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
+            # Load curvature data of closest match and generate plots
+            closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")
+            closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
+            closest_angle_img, _ = generate_graph(analysis_config, closest_id, "template", "angle_plot")
+            closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
+        else: # keypoint
+            closest_plot_img = None
+            closest_color_img = None
+            closest_angle_img = None
+            closest_id_text = None
+    else: # no closest_id found / there is an error
         closest_svg_output = "<p>No closest match found</p>"
         closest_icp_output = None
         closest_plot_img = None
@@ -126,8 +130,6 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     else: # or html-svg
         closest_svg_output = gr.update(value=closest_svg_output, visible=True)
         closest_icp_output = gr.update(visible=False)
-
-
 
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")
