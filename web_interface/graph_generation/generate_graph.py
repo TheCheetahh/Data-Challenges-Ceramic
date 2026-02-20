@@ -1,4 +1,4 @@
-from analysis.calculation.ipc.icp import generate_icp_overlap_image
+from analysis.calculation.icp.icp import generate_icp_overlap_image
 from web_interface.graph_generation.laa.laa_graphs import laa_generate_curvature_lineplot, \
     laa_generate_curvature_color_map, \
     laa_generate_direction_lineplot, laa_get_template_svg
