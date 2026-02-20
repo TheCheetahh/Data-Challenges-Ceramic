@@ -2,7 +2,7 @@ import gradio as gr
 
 from database_handler import MongoDBHandler
 from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
-from web_interface.button_calls.button_analyze_svg import click_analyze_svg
+from web_interface.button_calls.button_analyze_svg import click_analyze_svg, update_analyze_button_color
 from web_interface.button_calls.button_csv_download import click_csv_download
 from web_interface.button_calls.button_csv_upload import click_csv_upload
 from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample
@@ -13,6 +13,7 @@ from web_interface.button_calls.button_save_sample_type import click_save_sample
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 from web_interface.button_calls.button_batch_analyze import click_batch_analyze
 from web_interface.other_gradio_components.crop_svg import change_crop_svg_dropdown, update_crop_preview
+from web_interface.other_gradio_components.dropdown import update_sample_id_dropdown
 
 css = """
 /* target by elem_id and common class names used by Gradio versions */
@@ -35,6 +36,7 @@ css = """
 
 # main webpage code
 with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
+
     db_handler = MongoDBHandler("svg_data")
 
     # states work like a variable
@@ -43,6 +45,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     current_index_state = gr.State(0)
     next_index_one = gr.State(1)
     prev_index_one = gr.State(-1)
+
+    # Needed for svg uploads
+    state_svg_type_sample = gr.State("sample")
+    state_svg_type_template = gr.State("template")
 
     with gr.Tabs():
         # Tab for all upload related things
@@ -85,7 +91,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                             # csv download
                             gr.Markdown("### CSV Download för sämples täble")
                             csv_download_button = gr.Button("Download Project CSV")
-                            csv_file_output = gr.File(label="Download", visible=True)
+                            csv_file_output = gr.File(label="Download", visible=False)
 
             # generate clean svg from raw svg in database
             # clean_svg_button = gr.Button("🚀 Clean SVG")
@@ -182,7 +188,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     with gr.Row():
                         batch_analyse_button = gr.Button("Analyze all Samples", variant="stop")
                         save_type_button = gr.Button("Save sample type")
-                        analyze_button = gr.Button("Analyze SVG")
+                        analyze_button = gr.Button("Analyze SVG", variant="primary")
 
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Pinned Match")
@@ -302,9 +308,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             selected_row = gr.State(None)
             rule_ids = gr.State([])
 
-    # Button logic:
-    state_svg_type_sample = gr.State("sample")
-    state_svg_type_template = gr.State("template")
 
     # On load of gradio
     demo.load(
@@ -312,11 +315,31 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[synonym_table, rule_ids]
     )
 
+    demo.load(
+        fn=update_sample_id_dropdown,
+        outputs=[svg_dropdown]
+    )
+
+    demo.load(
+        fn=update_sample_id_dropdown,
+        outputs=[crop_svg_dropdown]
+    )
+
+    demo.load(
+        fn=change_crop_svg_dropdown,
+        inputs=[crop_svg_dropdown],
+        outputs=[full_svg_display, cropped_svg_display, crop_start, crop_end]
+    )
+
     # svg upload
     button_svg_upload.click(
         fn=click_svg_upload,
         inputs=[svg_input, state_svg_type_sample],
         outputs=[status_output_text, svg_dropdown]
+    ).then(
+        fn=update_sample_id_dropdown,
+        inputs=[],
+        outputs=[crop_svg_dropdown]
     )
 
     # csv upload
@@ -375,11 +398,15 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_synonyme_output,
             pinned_index_display
     ]
+    ).then(
+            fn=update_analyze_button_color,
+            inputs=[current_sample_state, svg_dropdown],
+            outputs=[analyze_button]
     )
 
     save_type_button.click(
         fn=click_save_sample_type,
-        inputs=[svg_dropdown, sample_type_output],  # using svg_dropdown might cause issues
+        inputs=[current_sample_state, sample_type_output],  # using svg_dropdown might cause issues
         outputs=[status_output_text]
     )
 
@@ -464,6 +491,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_synonyme_output,
             pinned_index_display
     ]
+    ).then(
+            fn=update_analyze_button_color,
+            inputs=[current_sample_state, svg_dropdown],
+            outputs=[analyze_button]
     )
 
     # Dropdown change - loads from database and updates sliders
@@ -512,12 +543,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[selected_row, selected_label]
     )
 
-    """synonym_input.change(
-        fn=update_checkbox_synonym,
-        inputs=[current_sample_state, synonym_input],
-        outputs=[closest_list_state]
-    )"""
-
     pin_button.click(
         fn=click_pin_button,
         inputs=[distance_value_dataset,
@@ -545,5 +570,12 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     csv_download_button.click(
         fn=click_csv_download,
         inputs=[],
-        outputs=[csv_file_output]
+        outputs=[csv_file_output, csv_file_output]
+    )
+
+    # sample dropdown change
+    svg_dropdown.change(
+        fn=update_analyze_button_color,
+        inputs=[current_sample_state, svg_dropdown],
+        outputs=[analyze_button]
     )
