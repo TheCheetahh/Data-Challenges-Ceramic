@@ -325,6 +325,12 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[crop_svg_dropdown]
     )
 
+    demo.load(
+        fn=change_crop_svg_dropdown,
+        inputs=[crop_svg_dropdown],
+        outputs=[full_svg_display, cropped_svg_display, crop_start, crop_end]
+    )
+
     # svg upload
     button_svg_upload.click(
         fn=click_svg_upload,
