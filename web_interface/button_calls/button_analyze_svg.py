@@ -171,3 +171,10 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         f"{current_index+1} / {len(closest_matches_list)}",  # index_display
         sample_id                          # current_sample_state
     )
+
+
+def update_analyze_button_color(current_sample_state, svg_dropdown):
+    if current_sample_state == svg_dropdown:
+        return gr.Button("Analyze SVG", variant="secondary")
+    else:
+        return gr.Button("Analyze SVG", variant="primary")

@@ -2,7 +2,7 @@ import gradio as gr
 
 from database_handler import MongoDBHandler
 from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
-from web_interface.button_calls.button_analyze_svg import click_analyze_svg
+from web_interface.button_calls.button_analyze_svg import click_analyze_svg, update_analyze_button_color
 from web_interface.button_calls.button_csv_download import click_csv_download
 from web_interface.button_calls.button_csv_upload import click_csv_upload
 from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample
@@ -182,7 +182,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     with gr.Row():
                         batch_analyse_button = gr.Button("Analyze all Samples", variant="stop")
                         save_type_button = gr.Button("Save sample type")
-                        analyze_button = gr.Button("Analyze SVG")
+                        analyze_button = gr.Button("Analyze SVG", variant="primary")
 
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Pinned Match")
@@ -375,11 +375,15 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_synonyme_output,
             pinned_index_display
     ]
+    ).then(
+            fn=update_analyze_button_color,
+            inputs=[current_sample_state, svg_dropdown],
+            outputs=[analyze_button]
     )
 
     save_type_button.click(
         fn=click_save_sample_type,
-        inputs=[svg_dropdown, sample_type_output],  # using svg_dropdown might cause issues
+        inputs=[current_sample_state, sample_type_output],  # using svg_dropdown might cause issues
         outputs=[status_output_text]
     )
 
@@ -464,6 +468,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_synonyme_output,
             pinned_index_display
     ]
+    ).then(
+            fn=update_analyze_button_color,
+            inputs=[current_sample_state, svg_dropdown],
+            outputs=[analyze_button]
     )
 
     # Dropdown change - loads from database and updates sliders
@@ -546,4 +554,11 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         fn=click_csv_download,
         inputs=[],
         outputs=[csv_file_output]
+    )
+
+    # sample dropdown change
+    svg_dropdown.change(
+        fn=update_analyze_button_color,
+        inputs=[current_sample_state, svg_dropdown],
+        outputs=[analyze_button]
     )
