@@ -137,8 +137,10 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     # Load the list of closest matches from DB. Returns it filtered or unfiltered
     closest_matches_list = filter_synonym_matches(sample_id, duplicate_synonym_checkbox)
 
-    db_handler.use_collection("svg_template_types")
-    closest_type = db_handler.get_sample_type(closest_id)
+    db_handler.use_collection("svg_synonym_rules")
+    rule = db_handler.collection.find_one({"members": closest_id})
+    closest_template_synonymes = ", ".join(rule.get("members", [])) if rule else ""
+    db_handler.use_collection("svg_raw")
 
     # Reset navigation state
     current_index = 0  # first one shown is index 0
@@ -162,7 +164,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
         closest_id_text,                  # closest_sample_id_output
         sample_type,                      # sample_type_output
-        closest_type,                     # closest_type_output
+        closest_template_synonymes,       # closest_template_synonymes
 
         closest_matches_list,             # closest_list_state
         current_index,                    # current_index_state

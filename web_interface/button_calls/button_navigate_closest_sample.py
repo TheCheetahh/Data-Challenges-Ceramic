@@ -103,7 +103,9 @@ def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset,
         svg_update = gr.update(value=svg_html, visible=True)
         icp_update = gr.update(visible=False)
 
-    typ_text = db_handler.get_sample_type(next_id)
+    db_handler.use_collection("svg_synonym_rules")
+    rule = db_handler.collection.find_one({"members": next_id})
+    typ_text = ", ".join(rule.get("members", [])) if rule else ""
 
     return (
         svg_update,     # closest_svg_output (gr.update)

@@ -52,6 +52,4 @@ def filter_synonym_matches(sample_id, checked_state):
             {"$set": {"closest_matches": filtered_matches}}
         )
 
-    print(len(filtered_matches))
-
     return filtered_matches

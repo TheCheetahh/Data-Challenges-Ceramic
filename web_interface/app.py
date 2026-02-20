@@ -169,6 +169,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         choices=[str(sid) for sid in db_handler.list_svg_ids()],
                         label="Select SVG to analyze (after a change in selection you must press analyze svg)"
                     )
+                    duplicate_synonym_checkbox = gr.Checkbox(label=" Show only first result of all synonym groups",
+                                                             value=False)
                     with gr.Row():
                         analyze_button = gr.Button("Analyze SVG")
                         batch_analyse_button = gr.Button("Analyze all Samples")
@@ -178,17 +180,19 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         interactive=True
                     )
 
-                    save_type_button = gr.Button("Save changes")
+                    save_type_button = gr.Button("Save sample type to database")
 
 
 
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Pinned Match")
 
+                    # displays type and distance
                     pinned_sample_id_output = gr.Textbox(label="Pinned Sample ID", interactive=False)
 
+                    # change this to synonym group
                     pinned_type_output = gr.Textbox(
-                        label="Pinned Sample Type",
+                        label="Synonymes",
                         interactive=True
                     )
 
@@ -202,14 +206,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Closest Match")
 
+                    # displays type and distance
                     closest_sample_id_output = gr.Textbox(label="Closest Template ID", interactive=False)
 
-                    closest_type_output = gr.Textbox(
-                        label="Closest Template Type",
+                    # change this to synonym group
+                    closest_template_synonymes = gr.Textbox(
+                        label="Synonymes",
                         interactive=True
                     )
-
-                    duplicate_synonym_checkbox = gr.Checkbox(label=" Show all synonym results", value=False)
 
                     with gr.Row():
                         previous_sample_button = gr.Button("←")
@@ -346,7 +350,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  closest_angle_plot_output,
                  closest_sample_id_output,
                  sample_type_output,
-                 closest_type_output,
+                 closest_template_synonymes,
                  closest_list_state,
                  current_index_state,
                  index_display,
@@ -361,7 +365,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_curvature_color_output,
             closest_angle_plot_output,
             closest_sample_id_output,
-            closest_type_output,
+            closest_template_synonymes,
             current_index_state],
     outputs=[
         pinned_svg_output,
@@ -393,7 +397,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_curvature_color_output,
             closest_angle_plot_output,
 
-            closest_type_output,
+            closest_template_synonymes,
             current_index_state,
             closest_sample_id_output,
             index_display
@@ -412,7 +416,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_curvature_color_output,
             closest_angle_plot_output,
 
-            closest_type_output,
+            closest_template_synonymes,
             current_index_state,
             closest_sample_id_output,
             index_display
@@ -435,7 +439,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  closest_angle_plot_output,
                  closest_sample_id_output,
                  sample_type_output,
-                 closest_type_output,
+                 closest_template_synonymes,
                  closest_list_state,
                  current_index_state,
                  index_display,
@@ -450,7 +454,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_curvature_color_output,
             closest_angle_plot_output,
             closest_sample_id_output,
-            closest_type_output,
+            closest_template_synonymes,
             current_index_state],
     outputs=[
         pinned_svg_output,
@@ -526,8 +530,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 closest_curvature_color_output,
                 closest_angle_plot_output,
                 closest_sample_id_output,
-                closest_type_output,
-            current_index_state],
+                closest_template_synonymes,
+                current_index_state],
         outputs=[
             pinned_svg_output,
             pinned_icp_output,
