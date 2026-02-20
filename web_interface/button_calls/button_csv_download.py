@@ -1,8 +1,8 @@
 import csv
 import io
 import tempfile
-import os
 from database_handler import MongoDBHandler
+import gradio as gr
 
 EXPORT_FIELDS = ["sample_id", "Warenart", "Form", "Typ", "Randerhaltung"]
 DEBUG = False
@@ -14,7 +14,7 @@ def click_csv_download():
 
         docs = list(db_handler.collection.find({}, {field: 1 for field in EXPORT_FIELDS} | {"_id": 0}))
         if not docs:
-            return None
+            return None, gr.File(visible=False)
 
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=EXPORT_FIELDS, extrasaction="ignore", delimiter=";")
@@ -28,7 +28,7 @@ def click_csv_download():
         tmp.write(output.getvalue())
         tmp.close()
 
-        return tmp.name
+        return tmp.name, gr.File(visible=True)
 
     else:
 
@@ -37,7 +37,7 @@ def click_csv_download():
 
         docs = list(db_handler.collection.find({}, {"sample_id": 1, "closest_matches": 1, "_id": 0}))
         if not docs:
-            return None
+            return None, gr.File(visible=False)
 
         # Find the maximum number of closest matches across all documents
         max_matches = max(len(doc.get("closest_matches", [])) for doc in docs)
@@ -58,4 +58,4 @@ def click_csv_download():
         tmp.write(output.getvalue())
         tmp.close()
 
-        return tmp.name
+        return tmp.name, gr.File(visible=True)

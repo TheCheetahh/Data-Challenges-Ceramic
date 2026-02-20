@@ -2,6 +2,8 @@ from analysis.clean_SVG import clean_all_svgs
 from database_handler import MongoDBHandler
 import gradio as gr
 
+from web_interface.other_gradio_components.dropdown import update_sample_id_dropdown
+
 
 def click_svg_upload(svg_input, svg_file_type):
     """
@@ -20,12 +22,12 @@ def click_svg_upload(svg_input, svg_file_type):
 
     if svg_file_type == "sample":
         # Return both status message and dropdown update
-        svg_id_list = db_handler.list_svg_ids()
-        dropdown_update = gr.update(choices=[str(sid) for sid in svg_id_list])
 
         message.append(clean_all_svgs(db_handler, svg_file_type))
 
+        dropdown_update = update_sample_id_dropdown()
         return "\n".join(message), dropdown_update
+
     else:
 
         message.append(clean_all_svgs(db_handler, svg_file_type))

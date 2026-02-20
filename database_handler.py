@@ -72,9 +72,9 @@ class MongoDBHandler:
                     try:
                         sample_id = filename_only.split("_")[1].split(".")[0]
                     except Exception:
-                        raise ValueError(
-                            f"Invalid sample filename format (expected e.g. recons_10003.svg): {filename_only}"
-                        )
+                        print(f"Invalid sample filename format (expected e.g. recons_10003.svg): {filename_only} but lets try it anyway, its in the database now")
+                        sample_id = filename_only
+
                     Typ_value = ""  # samples do not have a type
 
                 # ------------------------------------------------------------------
