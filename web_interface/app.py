@@ -4,6 +4,7 @@ from database_handler import MongoDBHandler
 from web_interface.button_calls.button_add_rule import click_add_rule, load_rules
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
 from web_interface.button_calls.button_csv_download import click_csv_download
+from web_interface.button_calls.button_csv_upload import click_csv_upload
 from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample
 from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_pin import click_pin_button
@@ -318,7 +319,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     # csv upload
     csv_upload_button.click(
-        fn=db_handler.action_add_csv_data,
+        fn=click_csv_upload,
         inputs=[csv_input],
         outputs=[status_output_text]
     )

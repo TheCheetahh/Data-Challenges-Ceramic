@@ -4,7 +4,7 @@ import tempfile
 import os
 from database_handler import MongoDBHandler
 
-EXPORT_FIELDS = ["sample_id", "closest_matches"]
+EXPORT_FIELDS = ["sample_id", "Warenart", "Form", "Typ", "Randerhaltung"]
 DEBUG = False
 
 def click_csv_download():
@@ -20,15 +20,11 @@ def click_csv_download():
         writer = csv.DictWriter(output, fieldnames=EXPORT_FIELDS, extrasaction="ignore", delimiter=";")
         writer.writeheader()
         for doc in docs:
-            flat = {
-                "sample_id": doc.get("sample_id", ""),
-                # Extract just the ids from closest_matches list
-                "closest_matches": ", ".join(m.get("id", "") for m in doc.get("closest_matches", []))
-            }
+            flat = {field: doc.get(field, "") for field in EXPORT_FIELDS}
             writer.writerow(flat)
 
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False,
-                                          newline="", encoding="utf-8")
+                                          newline="", encoding="utf-8-sig")
         tmp.write(output.getvalue())
         tmp.close()
 
