@@ -99,10 +99,10 @@ def _compute_distance_process(template_doc, safe_config):
 
     finally:
         end_ts = time.perf_counter()
-        print(
+        """print(
             f"[PID {os.getpid()}] template={template_id} "
             f"time={(end_ts - start_ts):.3f}s"
-        )
+        )"""
 
 def get_closest_matches_list(analysis_config):
     """
