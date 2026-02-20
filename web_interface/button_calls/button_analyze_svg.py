@@ -6,6 +6,7 @@ from analysis.calculation.get_closest_matches_list import get_closest_matches_li
 import gradio as gr
 
 from web_interface.graph_generation.generate_graph import generate_graph
+from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
 
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
@@ -120,8 +121,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_angle_img = None
         closest_id_text = "No closest match found"
 
-    """if duplicate_synonym_checkbox:
-        filter_synonym_matches(sample_id)"""
+
 
     # is output image
     if distance_value_dataset == "ICP":
@@ -134,8 +134,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")
     sample_type = db_handler.get_sample_type(sample_id)
-    # Load the full list of closest matches from DB
-    closest_matches_list = db_handler.get_closest_matches(sample_id)
+    # Load the list of closest matches from DB. Returns it filtered or unfiltered
+    closest_matches_list = filter_synonym_matches(sample_id, duplicate_synonym_checkbox)
 
     db_handler.use_collection("svg_template_types")
     closest_type = db_handler.get_sample_type(closest_id)
