@@ -201,10 +201,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Closest Match")
 
-                    closest_sample_id_output = gr.Textbox(label="Closest Sample ID", interactive=False)
+                    closest_sample_id_output = gr.Textbox(label="Closest Template ID", interactive=False)
 
                     closest_type_output = gr.Textbox(
-                        label="Closest Sample Type",
+                        label="Closest Template Type",
                         interactive=True
                     )
 
@@ -354,7 +354,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_curvature_color_output,
             closest_angle_plot_output,
             closest_sample_id_output,
-            closest_type_output],
+            closest_type_output,
+            current_index_state],
     outputs=[
         pinned_svg_output,
         pinned_icp_output,
@@ -362,7 +363,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_curvature_color_output,
         pinned_angle_plot_output,
         pinned_sample_id_output,
-        pinned_type_output
+        pinned_type_output,
+            pinned_index_display
     ]
     )
 
@@ -441,7 +443,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_curvature_color_output,
             closest_angle_plot_output,
             closest_sample_id_output,
-            closest_type_output],
+            closest_type_output,
+            current_index_state],
     outputs=[
         pinned_svg_output,
         pinned_icp_output,
@@ -449,7 +452,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         pinned_curvature_color_output,
         pinned_angle_plot_output,
         pinned_sample_id_output,
-        pinned_type_output
+        pinned_type_output,
+            pinned_index_display
     ]
     )
 
@@ -515,7 +519,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 closest_curvature_color_output,
                 closest_angle_plot_output,
                 closest_sample_id_output,
-                closest_type_output],
+                closest_type_output,
+            current_index_state],
         outputs=[
             pinned_svg_output,
             pinned_icp_output,
@@ -523,7 +528,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             pinned_curvature_color_output,
             pinned_angle_plot_output,
             pinned_sample_id_output,
-            pinned_type_output
+            pinned_type_output,
+            pinned_index_display
         ]
     )
 
