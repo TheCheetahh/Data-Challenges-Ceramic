@@ -112,66 +112,6 @@ class MongoDBHandler:
         return "\n".join(messages)
 
 
-    def action_add_csv_data(self, csv_file):
-        """Add CSV data to the SVG documents in the database."""
-        if csv_file is None:
-            return "⚠️ No CSV file provided."
-
-        # set collection
-        self.use_collection("svg_raw")
-
-        # Read file as bytes. This gets encoding of the csv
-        rawdata = open(csv_file.name, "rb").read()
-        result = chardet.detect(rawdata)
-        encoding = result['encoding']
-
-        # Load CSV into a DataFrame
-        try:
-            csv_df = pd.read_csv(csv_file.name, sep=';', encoding=encoding)
-            # print(csv_df.columns) # debug
-        except Exception as e:
-            return f"Error reading CSV: {e}"
-
-        # there are duplicate entries in the Excel/csv for the same sample_id. Need to figure this out and make git
-        # issue
-        duplicates = csv_df["Sample.Id"][csv_df["Sample.Id"].duplicated()]
-        if not duplicates.empty:
-            print(f"⚠️ Warning: duplicate Sample.Id values found: {duplicates.tolist()}")
-        # csv_df_grouped = csv_df.groupby("Sample.Id").first().reset_index() # group rejects all lines except the first
-        # merge all entries
-        csv_df_grouped = csv_df.groupby("Sample.Id").agg(lambda x: '|'.join(map(str, x.dropna()))).reset_index()
-        # Convert CSV to a dictionary for fast lookup: {Id: row_dict}
-        csv_lookup = csv_df_grouped.set_index("Sample.Id").to_dict(orient="index")
-
-        # Iterate over documents in the collection
-        updated_count = 0
-        skipped_count = 0  # svgs that did not get new data from the csv
-        for doc in self.find():
-            sample_id = doc.get("sample_id")
-            if not sample_id:
-                skipped_count += 1
-                continue
-
-            # if the sample_id of a svg in the database has a corresponding sample_id in the csv
-            if sample_id in csv_lookup:
-                info = csv_lookup[sample_id]
-                # Update the document in MongoDB with CSV fields
-                self.collection.update_one(
-                    {"_id": doc["_id"]},
-                    {"$set": {
-                        "Warenart": info.get("Sample.Warenart"),
-                        "Form": info.get("Sample.Form"),
-                        "Typ": info.get("Sample.Typ"),
-                        "Randerhaltung": info.get("Sample.Randerhaltung")
-                    }}
-                )
-                updated_count += 1
-            else:
-                skipped_count += 1
-
-        return f"CSV data added: {updated_count} documents updated, {skipped_count} were not found."
-
-
     def find(self, filter_query=None):
         """find all documents matching the provided filter."""
         if self.collection is None:
