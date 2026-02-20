@@ -1,2 +1,38 @@
-def click_pin_button():
-    return None, None, None
+import gradio as gr
+
+def click_pin_button(distance_value_dataset,
+                      closest_svg_output,
+                      closest_icp_output,
+                      closest_curvature_plot_output,
+                      closest_curvature_color_output,
+                      closest_angle_plot_output,
+                      closest_sample_id_output,
+                      closest_type_output,
+                     current_index_state
+                     ):
+
+    if distance_value_dataset == "ICP":
+        closest_svg_output = gr.update(visible=False)
+        closest_icp_output = gr.update(visible=True, value=closest_icp_output)
+        index_state = "Index: " + str(current_index_state + 1)
+        return (closest_svg_output,
+                closest_icp_output,
+                closest_curvature_plot_output,
+                closest_curvature_color_output,
+                closest_angle_plot_output,
+                closest_sample_id_output,
+                closest_type_output,
+                index_state
+                )
+    else:
+        closest_svg_output = gr.update(visible=True, value=closest_svg_output)
+        closest_icp_output = gr.update(visible=False)
+        index_state = "Index: " + str(current_index_state + 1)
+        return (closest_svg_output,
+                closest_icp_output,
+                closest_curvature_plot_output,
+                closest_curvature_color_output,
+                closest_angle_plot_output,
+                closest_sample_id_output,
+                closest_type_output,
+                index_state)

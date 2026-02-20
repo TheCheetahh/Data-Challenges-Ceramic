@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-from analysis.calculation.ipc.icp import ensure_icp_geometry, run_icp, icp_score
+from analysis.calculation.icp.icp import ensure_icp_geometry, run_icp, icp_score
 from analysis.calculation.laa.laa_calcualtion import laa_calculation
 from concurrent.futures import ProcessPoolExecutor
 

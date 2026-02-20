@@ -1,6 +1,6 @@
 from database_handler import MongoDBHandler
 from web_interface.formating_functions.format_svg import format_svg_for_display
-from analysis.calculation.ipc.icp import generate_icp_overlap_image
+from analysis.calculation.icp.icp import generate_icp_overlap_image
 import gradio as gr
 
 from web_interface.graph_generation.generate_graph import generate_graph

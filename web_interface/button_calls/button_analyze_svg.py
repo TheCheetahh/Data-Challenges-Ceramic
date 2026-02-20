@@ -106,7 +106,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")
             closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
             closest_angle_img, _ = generate_graph(analysis_config, closest_id, "template", "angle_plot")
-            closest_id_text = f"Closest match: {closest_id} (distance={distance:.4f})"
+            closest_id_text = f"{closest_id} (distance={distance:.4f})"
         else: # keypoint
             closest_plot_img = None
             closest_color_img = None
