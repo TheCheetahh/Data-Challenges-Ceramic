@@ -166,7 +166,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     gr.Markdown("## Current Sample")
                     svg_dropdown = gr.Dropdown(
                         choices=[str(sid) for sid in db_handler.list_svg_ids()],
-                        label="Select SVG to display"
+                        label="Select SVG to analyze (after a change in selection you must press analyze svg)"
                     )
                     with gr.Row():
                         analyze_button = gr.Button("Analyze SVG")
@@ -345,6 +345,25 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  index_display,
                  current_sample_state
                  ]
+    ).then(
+    fn=click_pin_button,
+    inputs=[distance_value_dataset,
+            closest_svg_output,
+            closest_icp_output,
+            closest_curvature_plot_output,
+            closest_curvature_color_output,
+            closest_angle_plot_output,
+            closest_sample_id_output,
+            closest_type_output],
+    outputs=[
+        pinned_svg_output,
+        pinned_icp_output,
+        pinned_curvature_plot_output,
+        pinned_curvature_color_output,
+        pinned_angle_plot_output,
+        pinned_sample_id_output,
+        pinned_type_output
+    ]
     )
 
     save_type_button.click(
@@ -413,6 +432,25 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  index_display,
                  current_sample_state
                  ]
+    ).then(
+    fn=click_pin_button,
+    inputs=[distance_value_dataset,
+            closest_svg_output,
+            closest_icp_output,
+            closest_curvature_plot_output,
+            closest_curvature_color_output,
+            closest_angle_plot_output,
+            closest_sample_id_output,
+            closest_type_output],
+    outputs=[
+        pinned_svg_output,
+        pinned_icp_output,
+        pinned_curvature_plot_output,
+        pinned_curvature_color_output,
+        pinned_angle_plot_output,
+        pinned_sample_id_output,
+        pinned_type_output
+    ]
     )
 
     # Dropdown change - loads from database and updates sliders
@@ -467,18 +505,27 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[closest_list_state]
     )"""
 
-    # dummy code to make pinned outputs not uploads. (gradio quirk)
     pin_button.click(
         fn=click_pin_button,
-        inputs=[],
+        inputs=[distance_value_dataset,
+
+                closest_svg_output,
+                closest_icp_output,
+                closest_curvature_plot_output,
+                closest_curvature_color_output,
+                closest_angle_plot_output,
+                closest_sample_id_output,
+                closest_type_output],
         outputs=[
+            pinned_svg_output,
+            pinned_icp_output,
             pinned_curvature_plot_output,
             pinned_curvature_color_output,
-            pinned_angle_plot_output
+            pinned_angle_plot_output,
+            pinned_sample_id_output,
+            pinned_type_output
         ]
     )
-
-
 
     csv_download_button.click(
         fn=click_csv_download,
