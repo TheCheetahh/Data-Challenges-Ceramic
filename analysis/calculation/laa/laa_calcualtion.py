@@ -14,7 +14,7 @@ def laa_calculation(analysis_config, template_doc, template_id):
     sample_id = analysis_config.get("sample_id")
     top_k = analysis_config.get("top_k")
     distance_value_dataset = analysis_config.get("distance_value_dataset")
-    db_handler = analysis_config.get("db_handler")
+    db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_template_types")
 
     db_handler.use_collection("svg_raw")
