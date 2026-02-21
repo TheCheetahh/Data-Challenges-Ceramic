@@ -495,7 +495,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  closest_list_state,
                  current_index_state,
                  index_display,
-                 current_sample_state
+                 current_sample_state,
+                 last_analysis_state
                  ]
     ).then(
     fn=click_pin_button,
