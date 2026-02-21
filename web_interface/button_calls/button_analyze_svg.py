@@ -36,6 +36,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Get the document
     doc = db_handler.collection.find_one({"sample_id": sample_id})
+    previous_method = doc.get("last_distance_method")
+    method_changed = previous_method != distance_value_dataset
     if not doc:
         placeholder_html = f"<p style='color:red;'>❌ No document found for sample_id: {sample_id}</p>"
         return (
@@ -60,10 +62,18 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     if distance_value_dataset == "ICP" or distance_value_dataset == "lip_aligned_angle":
         # Ensure all samples have curvature data, else compute and store it
         analysis_config["distance_type_dataset"] = "other samples"
-
         # Recompute if outdated OR if closest matches are invalid
-        if doc.get("outdated_curvature", False) or not doc.get("closest_matches_valid", False):
+        if (method_changed or doc.get("outdated_curvature", False) or not doc.get("closest_matches_valid", False)):
             compute_status = compute_curvature_for_one_item(analysis_config, sample_id)
+            db_handler.collection.update_one(
+                {"sample_id": sample_id},
+                {
+                    "$set": {
+                        "last_distance_method": distance_value_dataset,
+                        "closest_matches_valid": True
+                    }
+                }
+            )
             doc = db_handler.collection.find_one({"sample_id": sample_id})  # Reload doc after update
 
         # get all plots of current sample
@@ -80,7 +90,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
 
     # Find close matches. Recalculate them if curvature data was recalculated and close matches are outdated.
     # Otherwise, load the closest match from the DB
-    if not doc or not doc.get("closest_matches_valid", False):
+    if (method_changed or not doc or not doc.get("closest_matches_valid", False) or "closest_matches" not in doc):
         closest_id, distance, closest_msg = get_closest_matches_list(analysis_config)
     else:
         closest_id = doc["closest_matches"][0]["id"]
