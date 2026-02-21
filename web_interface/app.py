@@ -50,6 +50,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     state_svg_type_sample = gr.State("sample")
     state_svg_type_template = gr.State("template")
 
+    # Remember the last state
+    last_analysis_state = gr.State(None)
+    
+
     with gr.Tabs():
         # Tab for all upload related things
         with gr.Tab("Manage files"):
@@ -355,6 +359,28 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[status_output_text]
     )
 
+    analysis_button_inputs = [
+        current_sample_state,
+        svg_dropdown,
+        distance_value_dataset,
+        distance_calculation,
+        smooth_method_dropdown,
+        smooth_factor,
+        smooth_window_slider,
+        samples,
+        last_analysis_state,
+    ]
+
+    analysis_controls = [
+        svg_dropdown,
+        distance_value_dataset,
+        distance_calculation,
+        smooth_method_dropdown,
+        smooth_factor,
+        smooth_window_slider,
+        samples,
+    ]
+
     analyze_button.click(
         fn=click_analyze_svg,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
@@ -375,7 +401,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  closest_list_state,
                  current_index_state,
                  index_display,
-                 current_sample_state
+                 current_sample_state,
+                 last_analysis_state,
                  ]
     ).then(
     fn=click_pin_button,
@@ -399,9 +426,9 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             pinned_index_display
     ]
     ).then(
-            fn=update_analyze_button_color,
-            inputs=[current_sample_state, svg_dropdown],
-            outputs=[analyze_button]
+        fn=update_analyze_button_color,
+        inputs=analysis_button_inputs,
+        outputs=[analyze_button]
     )
 
     save_type_button.click(
@@ -492,9 +519,9 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             pinned_index_display
     ]
     ).then(
-            fn=update_analyze_button_color,
-            inputs=[current_sample_state, svg_dropdown],
-            outputs=[analyze_button]
+        fn=update_analyze_button_color,
+        inputs=analysis_button_inputs,
+        outputs=[analyze_button]
     )
 
     # Dropdown change - loads from database and updates sliders
@@ -573,9 +600,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[csv_file_output, csv_file_output]
     )
 
-    # sample dropdown change
-    svg_dropdown.change(
-        fn=update_analyze_button_color,
-        inputs=[current_sample_state, svg_dropdown],
-        outputs=[analyze_button]
-    )
+    # change color when any relevant control changes
+    for control in analysis_controls:
+        control.change(
+            fn=update_analyze_button_color,
+            inputs=analysis_button_inputs,
+            outputs=[analyze_button],
+        )
