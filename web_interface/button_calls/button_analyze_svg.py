@@ -169,6 +169,21 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     current_index = 0  # first one shown is index 0
 
     final_status_message = f"{compute_status}\n"
+    # For button color changes
+    last_analysis_state = (
+        {
+            "method": "lip_aligned_angle",
+            "distance_calculation": distance_calculation,
+            "smooth_method": smooth_method,
+            "smooth_factor": smooth_factor,
+            "smooth_window": smooth_window,
+            "n_samples": n_samples,
+        }
+        if distance_value_dataset == "lip_aligned_angle"
+        else {
+            "method": distance_value_dataset
+        }
+    )
 
     # Return all outputs
     return (
@@ -192,12 +207,48 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_matches_list,             # closest_list_state
         current_index,                    # current_index_state
         f"{current_index+1} / {len(closest_matches_list)}",  # index_display
-        sample_id                          # current_sample_state
+        sample_id,                          # current_sample_state
+        last_analysis_state
     )
 
 
-def update_analyze_button_color(current_sample_state, svg_dropdown):
-    if current_sample_state == svg_dropdown:
-        return gr.Button("Analyze SVG", variant="secondary")
-    else:
+def update_analyze_button_color(
+    current_sample_state,
+    svg_dropdown,
+    distance_value_dataset,
+    distance_calculation,
+    smooth_method,
+    smooth_factor,
+    smooth_window,
+    n_samples,
+    last_analysis_state,
+):
+    # Different sample
+    if current_sample_state != svg_dropdown:
         return gr.Button("Analyze SVG", variant="primary")
+
+    current_signature = (
+        {
+            "method": "lip_aligned_angle",
+            "distance_calculation": distance_calculation,
+            "smooth_method": smooth_method,
+            "smooth_factor": smooth_factor,
+            "smooth_window": smooth_window,
+            "n_samples": n_samples,
+        }
+        if distance_value_dataset == "lip_aligned_angle"
+        else {
+            "method": distance_value_dataset
+        }
+    )
+
+    # No previous run
+    if last_analysis_state is None:
+        return gr.Button("Analyze SVG", variant="primary")
+
+    # Settings changed
+    if current_signature != last_analysis_state:
+        return gr.Button("Analyze SVG", variant="primary")
+
+    # Everything matches
+    return gr.Button("Analyze SVG", variant="secondary")
