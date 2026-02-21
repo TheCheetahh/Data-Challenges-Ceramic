@@ -8,6 +8,7 @@ def click_batch_analyze(distance_type_dataset, distance_value_dataset, distance_
         called by button
         calculates all data and stores it in db for all samples
 
+        :param duplicate_synonym_checkbox:
         :param distance_type_dataset:
         :param distance_calculation:
         :param distance_value_dataset:
