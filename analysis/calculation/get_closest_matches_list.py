@@ -84,7 +84,12 @@ def get_closest_matches_list(analysis_config):
                     if target_doc is None:
                         raise ValueError("Target document not found")
 
-                    target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+                    target_icp = ensure_icp_geometry(
+                        target_doc,
+                        db_handler,
+                        n_target,
+                        role="target"
+                    )
                     target_pts = np.array(target_icp["outline_points"])
                 except Exception as e:
                     # Target is unsuitable for ICP → all distances = inf
@@ -106,7 +111,12 @@ def get_closest_matches_list(analysis_config):
                         distances.append((template_id, float("inf")))
                         continue
 
-                    ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+                    ref_icp = ensure_icp_geometry(
+                        ref_doc,
+                        db_handler,
+                        n_ref,
+                        role="reference"
+                    )
                     ref_pts = np.array(ref_icp["outline_points"])
                 except Exception:
                     distances.append((template_id, float("inf")))

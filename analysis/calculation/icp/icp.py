@@ -16,7 +16,7 @@ def _clear_icp_caches():
     _ORDER_CACHE.clear()
     _SIGNED_WIDTH_CACHE.clear()
 
-def prepare_icp_geometry_from_svg_string(svg_string, n_points):
+def prepare_icp_geometry_from_svg_string(svg_string, n_points, width_slice_frac):
     """
     Parse SVG string → sampled, centered outline points + avg width
     """
@@ -36,7 +36,7 @@ def prepare_icp_geometry_from_svg_string(svg_string, n_points):
     # center
     pts -= pts.mean(axis=0)
 
-    avg_width = compute_average_width(pts)
+    avg_width = compute_average_width(pts, slice_frac=width_slice_frac)
     if avg_width is None or avg_width == 0:
         raise ValueError("Invalid average width")
 
@@ -72,20 +72,28 @@ def compute_centerline(pts, slice_frac=0.5, tol=0.03):
 
     return np.vstack([p1, p2])
 
-def compute_average_width(pts):
-    seg = compute_centerline(pts)
+def compute_average_width(pts, slice_frac):
+    # primary slice
+    seg = compute_centerline(pts, slice_frac=slice_frac, tol=0.03)
     if seg is not None:
         width = float(np.linalg.norm(seg[1] - seg[0]))
         if width > 0:
             return width
 
-    # --- fallback: PCA-based global width ---
+    # secondary slice (more stable central fallback)
+    fallback_frac = 0.5
+    if abs(fallback_frac - slice_frac) > 1e-6:
+        seg = compute_centerline(pts, slice_frac=fallback_frac, tol=0.05)
+        if seg is not None:
+            width = float(np.linalg.norm(seg[1] - seg[0]))
+            if width > 0:
+                return width
+
+    # final fallback: PCA-based global width
     X = pts - pts.mean(axis=0)
     _, S, _ = np.linalg.svd(X, full_matrices=False)
 
-    # second singular value ≈ half-width scale
     fallback_width = 2.0 * S[1] / np.sqrt(len(pts))
-
     if fallback_width > 0:
         return float(fallback_width)
 
@@ -906,8 +914,8 @@ def plot_icp_overlap(
     # --------------------------------------------------
     # 7) Average width lines
     # --------------------------------------------------
-    ref_seg = compute_centerline(reference_pts)
-    tgt_seg = compute_centerline(aligned_target_pts)
+    ref_seg = compute_centerline(reference_pts, slice_frac=0.75)
+    tgt_seg = compute_centerline(aligned_target_pts, slice_frac=0.5)
 
     if ref_seg is not None:
         ax.plot(ref_seg[:, 0], ref_seg[:, 1],
@@ -981,7 +989,8 @@ def precompute_icp_for_all_references(db_handler, n_points):
 
             pts, avg_width = prepare_icp_geometry_from_svg_string(
                 svg_string,
-                n_points
+                n_points,
+                width_slice_frac=0.75
             )
 
             icp_data = {
@@ -1005,23 +1014,33 @@ def precompute_icp_for_all_references(db_handler, n_points):
             print(f"[ICP] FAILED reference {doc['sample_id']}: {e}")
 
 
-def ensure_icp_geometry(doc, db_handler, n_points):
+def ensure_icp_geometry(doc, db_handler, n_points, role):
     """
     function to get info for icp method
     """
+    if role == "reference":
+        width_slice_frac = 0.75
+    elif role == "target":
+        width_slice_frac = 0.5
+    else:
+        raise ValueError(f"Unknown ICP geometry role: {role}")
     if doc is None:
         raise ValueError("ensure_icp_geometry called with doc=None")
 
-    if doc.get("icp_data"):
+    if role == "reference" and doc.get("icp_data"):
         settings = doc["icp_data"].get("settings", {})
-        if settings.get("n_points") == n_points:
+        if (
+            settings.get("n_points") == n_points and
+            settings.get("width_slice_frac") == width_slice_frac
+        ):
             return doc["icp_data"]
     
     svg_string = doc.get("cropped_svg", doc["cleaned_svg"])
 
     pts, avg_width = prepare_icp_geometry_from_svg_string(
         svg_string,
-        n_points
+        n_points,
+        width_slice_frac=width_slice_frac
     )
 
     icp_data = {
@@ -1030,7 +1049,9 @@ def ensure_icp_geometry(doc, db_handler, n_points):
         "settings": {
             "n_points": n_points,
             "centering": "mean",
-            "width_normalization": True
+            "width_normalization": True,
+            "width_slice_frac": width_slice_frac,
+            "role": role
         }
     }
 
@@ -1101,13 +1122,23 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
     # Load target
     db_handler.use_collection("svg_raw")
     target_doc = db_handler.collection.find_one({"sample_id": sample_id})
-    target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+    target_icp = ensure_icp_geometry(
+        target_doc,
+        db_handler,
+        n_target,
+        role="target"
+    )
     target_pts = np.array(target_icp["outline_points"])
 
     # Load reference
     db_handler.use_collection("svg_template_types")
     ref_doc = db_handler.collection.find_one({"sample_id": template_id})
-    ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+    ref_icp = ensure_icp_geometry(
+        ref_doc,
+        db_handler,
+        n_ref,
+        role="reference"
+    )
     ref_pts = np.array(ref_icp["outline_points"])
 
     # Run ICP again (cheap at top-1 scale)
