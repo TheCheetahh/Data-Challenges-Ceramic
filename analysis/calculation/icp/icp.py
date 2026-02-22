@@ -1161,3 +1161,62 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
         ref_pts,
         bbox=bbox
     )
+
+def compute_icp_distance(
+    db_handler,
+    sample_id,
+    template_id,
+    analysis_config
+):
+    n_target = analysis_config.get("icp_n_target", 300)
+    n_ref = analysis_config.get("icp_n_reference", 500)
+
+    # --- load target ---
+    db_handler.use_collection("svg_raw")
+    target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if target_doc is None:
+        return float("inf")
+
+    try:
+        target_icp = ensure_icp_geometry(
+            target_doc, db_handler, n_target, role="target"
+        )
+        target_pts = np.array(target_icp["outline_points"])
+    except Exception:
+        return float("inf")
+
+    # --- load reference ---
+    db_handler.use_collection("svg_template_types")
+    ref_doc = db_handler.collection.find_one({"sample_id": template_id})
+    if ref_doc is None:
+        return float("inf")
+
+    try:
+        ref_icp = ensure_icp_geometry(
+            ref_doc, db_handler, n_ref, role="reference"
+        )
+        ref_pts = np.array(ref_icp["outline_points"])
+    except Exception:
+        return float("inf")
+
+    # --- run icp ---
+    try:
+        err, aligned = run_icp(
+            target_pts,
+            ref_pts,
+            iters=analysis_config.get("icp_iters", 30),
+            max_total_deg=analysis_config.get("icp_max_deg", 2.0),
+            max_scale_step=analysis_config.get("icp_max_scale", 0.2),
+        )
+
+        if not np.isfinite(err):
+            return float("inf")
+
+        score, _ = icp_score(ref_pts, aligned, ref_id=template_id)
+        if not np.isfinite(score):
+            return float("inf")
+
+        return float(score)
+
+    except Exception:
+        return float("inf")
