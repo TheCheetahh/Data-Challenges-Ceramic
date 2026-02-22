@@ -50,21 +50,37 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             "n_samples": n_samples,
         }
     laa_config_changed = current_laa_config != previous_laa_config
+    
+    # While there are errors; it still needs to output value
+    empty_outputs = (
+        None,  # curvature_plot_img
+        None,  # curvature_color_img
+        None,  # angle_plot_img
+        "",    # final_status_message
+        None,  # closest_svg_output
+        None,  # closest_icp_output
+        None,  # closest_plot_img
+        None,  # closest_color_img
+        None,  # closest_angle_img
+        "",    # closest_id_text
+        "",    # sample_type
+        "",    # closest_template_synonymes
+        [],    # closest_matches_list
+        0,     # current_index
+        "0 / 0",  # index_display
+        None,  # current_sample_state
+        None   # last_analysis_state
+    )
+
     if not doc:
         placeholder_html = f"<p style='color:red;'>❌ No document found for sample_id: {sample_id}</p>"
-        return (
-            placeholder_html, None, None, None, f"❌ No document found",
-            placeholder_html, None, None, None, "❌ No closest match"
-        )
+        return (placeholder_html, *empty_outputs)
     # Use cropped_svg if available, otherwise use cleaned_svg
     svg_to_display = doc.get("cropped_svg") or doc.get("cleaned_svg")
 
     if not svg_to_display:
         placeholder_html = f"<p style='color:red;'>❌ No SVG data found</p>"
-        return (
-            placeholder_html, None, None, None, f"❌ No SVG data found",
-            placeholder_html, None, None, None, "❌ No closest match, because there was no valid SVG"
-        )
+        return (placeholder_html, *empty_outputs)
 
     # Remove fill and format the svg for display
     svg_no_fill = remove_svg_fill(svg_to_display)
