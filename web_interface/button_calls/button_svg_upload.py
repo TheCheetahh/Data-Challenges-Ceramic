@@ -29,7 +29,20 @@ def click_svg_upload(svg_input, svg_file_type):
         return "\n".join(message), dropdown_update
 
     else:
-
         message.append(clean_all_svgs(db_handler, svg_file_type))
 
-        return message
+        # set all prev method to None for recalculation
+        db_handler.use_collection("svg_raw")
+        db_handler.collection.update_many(
+            {},
+            {
+                "$set": {
+                    "last_distance_method": None,
+                    "last_laa_config": None,
+                    "closest_matches_valid": False,
+                    "outdated_curvature": True
+                }
+            }
+        )
+
+        return "\n".join(message)
