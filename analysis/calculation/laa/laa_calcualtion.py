@@ -37,6 +37,7 @@ def laa_calculation(analysis_config, template_doc, template_id):
     template_curvature = np.array(curv_data["curvature"])
     template_direction = np.array(curv_data["directions"])
 
+    # TODO
     # get amount of elements in the cropped 10%
     curve_len = len(sample_curvature)
     crop = int(curve_len * 0.10)
@@ -51,6 +52,7 @@ def laa_calculation(analysis_config, template_doc, template_id):
     if n_shard < 20:
         return None
 
+    # TODO
     # Convert sample directions to degrees in [-180, 180]
     direction_deg = np.degrees(sample_direction)
     direction_deg = ((direction_deg + 180) % 360) - 180
@@ -79,6 +81,7 @@ def laa_calculation(analysis_config, template_doc, template_id):
     best_shard_candidate = None
     best_template_candidate = None
 
+    # TODO
     left = n_samples  # start from usual n_samples
     right = 20000  # maximum resample
 
@@ -154,6 +157,7 @@ def compute_distance_for_resample(path_template, shard_candidates, direction_deg
     ts = np.linspace(0, 1, n_resample)
     points = np.array([path_template.point(t) for t in ts])
     points = np.column_stack((points.real, points.imag))
+    # TODO
     points = normalize_path(points, smooth_method="savgol", smooth_factor=0.02, smooth_window=15)
 
     diffs = np.diff(points, axis=0)
