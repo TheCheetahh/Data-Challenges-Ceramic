@@ -12,6 +12,10 @@ from collections import deque
 _ORDER_CACHE = {}
 _SIGNED_WIDTH_CACHE = {}
 
+scaling_factor = 2.0
+angle_weight = 0.1
+max_degree = 15.0
+
 def _clear_icp_caches():
     _ORDER_CACHE.clear()
     _SIGNED_WIDTH_CACHE.clear()
@@ -141,8 +145,8 @@ def rail_aware_correspondences(src, dst):
 
 def run_icp(source_pts, target_pts,
             iters=30,
-            max_total_deg=2.0,
-            max_scale_step=0.02):
+            max_total_deg=max_degree,
+            max_scale_step=angle_weight):
 
     src = source_pts.copy()
     dst = target_pts.copy()
@@ -676,7 +680,7 @@ def icp_score(reference_pts,
 
     # --- weighted combination ---
     W_CURV = 1.0
-    W_DIR  = 0.1   # start conservative; increase if curvature dominates too much
+    W_DIR  = angle_weight   # start conservative; increase if curvature dominates too much
 
     score = W_CURV * curvature_error + W_DIR * direction_error
     return float(score), bbox_poly
@@ -914,7 +918,7 @@ def plot_icp_overlap(
     # --------------------------------------------------
     # 7) Average width lines
     # --------------------------------------------------
-    ref_seg = compute_centerline(reference_pts, slice_frac=0.75)
+    ref_seg = compute_centerline(reference_pts, slice_frac=0.8)
     tgt_seg = compute_centerline(aligned_target_pts, slice_frac=0.5)
 
     if ref_seg is not None:
@@ -990,7 +994,7 @@ def precompute_icp_for_all_references(db_handler, n_points):
             pts, avg_width = prepare_icp_geometry_from_svg_string(
                 svg_string,
                 n_points,
-                width_slice_frac=0.75
+                width_slice_frac=0.8
             )
 
             icp_data = {
@@ -1019,7 +1023,7 @@ def ensure_icp_geometry(doc, db_handler, n_points, role):
     function to get info for icp method
     """
     if role == "reference":
-        width_slice_frac = 0.75
+        width_slice_frac = 0.8
     elif role == "target":
         width_slice_frac = 0.5
     else:
@@ -1146,8 +1150,8 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
         target_pts,
         ref_pts,
         iters=analysis_config.get("icp_iters", 30),
-        max_total_deg=analysis_config.get("icp_max_deg", 2.0),
-        max_scale_step=analysis_config.get("icp_max_scale", 0.2)
+        max_total_deg=analysis_config.get("icp_max_deg", max_degree),
+        max_scale_step=analysis_config.get("icp_max_scale", angle_weight)
     )
 
     score, bbox = icp_score(ref_pts, aligned, ref_id=template_id)
@@ -1205,8 +1209,8 @@ def compute_icp_distance(
             target_pts,
             ref_pts,
             iters=analysis_config.get("icp_iters", 30),
-            max_total_deg=analysis_config.get("icp_max_deg", 2.0),
-            max_scale_step=analysis_config.get("icp_max_scale", 0.2),
+            max_total_deg=analysis_config.get("icp_max_deg", max_degree),
+            max_scale_step=analysis_config.get("icp_max_scale", angle_weight),
         )
 
         if not np.isfinite(err):
