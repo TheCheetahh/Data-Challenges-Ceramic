@@ -103,45 +103,18 @@ def compute_average_width(pts, slice_frac):
 
     return None
 
-
-def rail_aware_correspondences(src, dst):
+def nearest_neighbor_correspondences(src, dst):
     """
-    Compute ICP correspondences where:
-    - left src points only match left dst points
-    - right src points only match right dst points
+    Standard ICP correspondences:
+    each src point matches its nearest dst point.
     """
-    src_w = signed_width_coordinate(src)
-    dst_w = signed_width_coordinate(dst)
-
-    src_pos = src[src_w >= 0]
-    src_neg = src[src_w < 0]
-
-    dst_pos = dst[dst_w >= 0]
-    dst_neg = dst[dst_w < 0]
-
-    matched_src = []
-    matched_dst = []
-
-    if len(src_pos) > 0 and len(dst_pos) > 0:
-        tree_p = cKDTree(dst_pos)
-        _, idx_p = tree_p.query(src_pos)
-        matched_src.append(src_pos)
-        matched_dst.append(dst_pos[idx_p])
-
-    if len(src_neg) > 0 and len(dst_neg) > 0:
-        tree_n = cKDTree(dst_neg)
-        _, idx_n = tree_n.query(src_neg)
-        matched_src.append(src_neg)
-        matched_dst.append(dst_neg[idx_n])
-
-    if not matched_src:
+    if len(src) == 0 or len(dst) == 0:
         return None, None
 
-    return (
-        np.vstack(matched_src),
-        np.vstack(matched_dst)
-    )
+    tree = cKDTree(dst)
+    _, idx = tree.query(src)
 
+    return src, dst[idx]
 
 def run_icp(source_pts, target_pts,
             iters=30,
@@ -160,7 +133,7 @@ def run_icp(source_pts, target_pts,
     best_err = np.inf
 
     for _ in range(iters):
-        matched_src, matched_dst = rail_aware_correspondences(src, dst)
+        matched_src, matched_dst = nearest_neighbor_correspondences(src, dst)
         if matched_src is None:
             break
 
