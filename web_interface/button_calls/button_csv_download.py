@@ -5,7 +5,7 @@ from database_handler import MongoDBHandler
 import gradio as gr
 
 EXPORT_FIELDS = ["sample_id", "Warenart", "Form", "Typ", "Randerhaltung"]
-DEBUG = True
+DEBUG = False
 
 def click_csv_download():
     if DEBUG == False:

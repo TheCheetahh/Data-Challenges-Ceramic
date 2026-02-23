@@ -29,7 +29,7 @@ def get_closest_matches_list(analysis_config):
 
         template_docs = list(db_handler.collection.find(
             {"sample_id": {"$ne": sample_id}},
-            {"sample_id": 1, "curvature_data": 1}
+            {"sample_id": 1, "curvature_data": 1,"raw_content": 1}
         ))
 
         db_handler = analysis_config.pop("db_handler")
@@ -49,7 +49,7 @@ def get_closest_matches_list(analysis_config):
         distances = []
         # iterate all templates, fill distances[] with results
         for template_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
-                                                       {"sample_id": 1, "curvature_data": 1}):
+                                                       {"sample_id": 1, "curvature_data": 1, "raw_content": 1}):
             template_id = template_doc["sample_id"]
 
             # dataset selection
