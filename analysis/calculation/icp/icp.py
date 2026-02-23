@@ -133,7 +133,7 @@ def rail_aware_correspondences(src, dst):
 
 def run_icp(source_pts, target_pts,
             iters=30,
-            max_total_deg=2.0,
+            max_total_deg=15.0,
             max_scale_step=0.02):
 
     src = source_pts.copy()
@@ -668,7 +668,7 @@ def icp_score(reference_pts,
 
     # --- weighted combination ---
     W_CURV = 1.0
-    W_DIR  = 0.1   # start conservative; increase if curvature dominates too much
+    W_DIR  = 0.5   # start conservative; increase if curvature dominates too much
 
     score = W_CURV * curvature_error + W_DIR * direction_error
     return float(score), bbox_poly
@@ -1115,7 +1115,7 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
         target_pts,
         ref_pts,
         iters=analysis_config.get("icp_iters", 30),
-        max_total_deg=analysis_config.get("icp_max_deg", 2.0),
+        max_total_deg=analysis_config.get("icp_max_deg", 15.0),
         max_scale_step=analysis_config.get("icp_max_scale", 0.2)
     )
 
