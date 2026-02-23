@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
 import matplotlib
+
+from analysis.calculation.laa.laa_calcualtion import find_all_lip_index_by_angle
+from analysis.analyze_curvature import normalize_path
 matplotlib.use("Agg")
 from PIL import Image
 import io
@@ -160,6 +163,7 @@ def laa_generate_direction_lineplot(target_id, target_type):
 def visualize_laa_overlap(analysis_config, template_id):
     db_handler = analysis_config.get("db_handler")
     sample_id = analysis_config.get("sample_id")
+    n_samples = analysis_config.get("n_samples")
 
     # Load sample doc
     db_handler.use_collection("svg_raw")
@@ -175,7 +179,7 @@ def visualize_laa_overlap(analysis_config, template_id):
 
     _, best_n_resample, best_shard_idx, best_template_idx = overlap_entry
 
-    # Generate sample points from SVG
+    # Generate sample points from SVG at n_samples points (same as calculation)
     sample_svg = sample_doc.get("cropped_svg") or sample_doc.get("cleaned_svg")
     if not sample_svg:
         return None, "No SVG found for sample"
@@ -183,9 +187,13 @@ def visualize_laa_overlap(analysis_config, template_id):
     if len(sample_paths) == 0:
         return None, "No paths in sample SVG"
     sample_path = sample_paths[0]
-    sample_ts = np.linspace(0, 1, best_n_resample)
+    sample_ts = np.linspace(0, 1, n_samples)
     sample_points = np.array([sample_path.point(t) for t in sample_ts])
     sample_points = np.column_stack((sample_points.real, sample_points.imag))
+
+    # Apply same smoothing as when curvature was calculated
+    smooth_window_sample = max(5, int(0.005 * n_samples))
+    sample_points = normalize_path(sample_points, smooth_method="savgol", smooth_factor=2, smooth_window=smooth_window_sample)
 
     # Load template SVG
     db_handler.use_collection("svg_template_types")
@@ -197,14 +205,23 @@ def visualize_laa_overlap(analysis_config, template_id):
         return None, "No paths in template SVG"
     path_template = template_paths[0]
 
-    # Sample points on template
+    # Sample points on template at best_n_resample points (same as calculation)
     ts = np.linspace(0, 1, best_n_resample)
     template_points = np.array([path_template.point(t) for t in ts])
     template_points = np.column_stack((template_points.real, template_points.imag))
 
-    # Shift both so their 0° points align at origin
-    sample_aligned = sample_points - sample_points[best_shard_idx]
-    template_aligned = template_points - template_points[best_template_idx]
+    # Apply same smoothing as in the calculation
+    smooth_window_template = max(5, int(0.005 * best_n_resample))
+    template_points = normalize_path(template_points, smooth_method="savgol", smooth_factor=2, smooth_window=smooth_window_template)
+
+    # Roll template the same way the distance calculation does
+    shift = best_shard_idx - best_template_idx
+    template_rolled = np.roll(template_points, shift, axis=0)
+
+    # Align both at best_shard_idx
+    actual_shard_idx = min(best_shard_idx, len(sample_points) - 1)
+    sample_aligned = sample_points - sample_points[actual_shard_idx]
+    template_aligned = template_rolled - template_rolled[actual_shard_idx]
 
     # Plot
     fig, ax = plt.subplots(figsize=(6, 6))
