@@ -12,11 +12,15 @@ from collections import deque
 _ORDER_CACHE = {}
 _SIGNED_WIDTH_CACHE = {}
 
+scaling_factor = 2.0
+angle_weight = 0.5
+max_degree = 15.0
+
 def _clear_icp_caches():
     _ORDER_CACHE.clear()
     _SIGNED_WIDTH_CACHE.clear()
 
-def prepare_icp_geometry_from_svg_string(svg_string, n_points):
+def prepare_icp_geometry_from_svg_string(svg_string, n_points, width_slice_frac):
     """
     Parse SVG string → sampled, centered outline points + avg width
     """
@@ -36,7 +40,7 @@ def prepare_icp_geometry_from_svg_string(svg_string, n_points):
     # center
     pts -= pts.mean(axis=0)
 
-    avg_width = compute_average_width(pts)
+    avg_width = compute_average_width(pts, slice_frac=width_slice_frac)
     if avg_width is None or avg_width == 0:
         raise ValueError("Invalid average width")
 
@@ -72,69 +76,50 @@ def compute_centerline(pts, slice_frac=0.5, tol=0.03):
 
     return np.vstack([p1, p2])
 
-def compute_average_width(pts):
-    seg = compute_centerline(pts)
+def compute_average_width(pts, slice_frac):
+    # primary slice
+    seg = compute_centerline(pts, slice_frac=slice_frac, tol=0.03)
     if seg is not None:
         width = float(np.linalg.norm(seg[1] - seg[0]))
         if width > 0:
             return width
 
-    # --- fallback: PCA-based global width ---
+    # secondary slice (more stable central fallback)
+    fallback_frac = 0.5
+    if abs(fallback_frac - slice_frac) > 1e-6:
+        seg = compute_centerline(pts, slice_frac=fallback_frac, tol=0.05)
+        if seg is not None:
+            width = float(np.linalg.norm(seg[1] - seg[0]))
+            if width > 0:
+                return width
+
+    # final fallback: PCA-based global width
     X = pts - pts.mean(axis=0)
     _, S, _ = np.linalg.svd(X, full_matrices=False)
 
-    # second singular value ≈ half-width scale
     fallback_width = 2.0 * S[1] / np.sqrt(len(pts))
-
     if fallback_width > 0:
         return float(fallback_width)
 
     return None
 
-
-def rail_aware_correspondences(src, dst):
+def nearest_neighbor_correspondences(src, dst):
     """
-    Compute ICP correspondences where:
-    - left src points only match left dst points
-    - right src points only match right dst points
+    Standard ICP correspondences:
+    each src point matches its nearest dst point.
     """
-    src_w = signed_width_coordinate(src)
-    dst_w = signed_width_coordinate(dst)
-
-    src_pos = src[src_w >= 0]
-    src_neg = src[src_w < 0]
-
-    dst_pos = dst[dst_w >= 0]
-    dst_neg = dst[dst_w < 0]
-
-    matched_src = []
-    matched_dst = []
-
-    if len(src_pos) > 0 and len(dst_pos) > 0:
-        tree_p = cKDTree(dst_pos)
-        _, idx_p = tree_p.query(src_pos)
-        matched_src.append(src_pos)
-        matched_dst.append(dst_pos[idx_p])
-
-    if len(src_neg) > 0 and len(dst_neg) > 0:
-        tree_n = cKDTree(dst_neg)
-        _, idx_n = tree_n.query(src_neg)
-        matched_src.append(src_neg)
-        matched_dst.append(dst_neg[idx_n])
-
-    if not matched_src:
+    if len(src) == 0 or len(dst) == 0:
         return None, None
 
-    return (
-        np.vstack(matched_src),
-        np.vstack(matched_dst)
-    )
+    tree = cKDTree(dst)
+    _, idx = tree.query(src)
 
+    return src, dst[idx]
 
 def run_icp(source_pts, target_pts,
             iters=30,
-            max_total_deg=15.0,
-            max_scale_step=0.02):
+            max_total_deg=max_degree,
+            max_scale_step=scaling_factor):
 
     src = source_pts.copy()
     dst = target_pts.copy()
@@ -148,7 +133,7 @@ def run_icp(source_pts, target_pts,
     best_err = np.inf
 
     for _ in range(iters):
-        matched_src, matched_dst = rail_aware_correspondences(src, dst)
+        matched_src, matched_dst = nearest_neighbor_correspondences(src, dst)
         if matched_src is None:
             break
 
@@ -183,10 +168,15 @@ def run_icp(source_pts, target_pts,
         src = scale * (R_limited @ src.T).T + t
 
         err = np.mean(np.linalg.norm(matched_src - matched_dst, axis=1))
-        if err < best_err - 1e-6:
+        patience = 3
+
+        if err < best_err:
             best_err = err
+            patience = 3
         else:
-            break
+            patience -= 1
+            if patience <= 0:
+                break
 
     return float(best_err), src
 
@@ -293,41 +283,6 @@ def adjust_bbox_to_include_split_rails(reference_pts, bbox_min, bbox_max,
             bbox_max = np.maximum(bbox_max, rail_pts.max(axis=0))
 
     return bbox_min, bbox_max
-"""
-def find_icp_matches(
-    target_pts,
-    reference_dict,
-    icp_params,
-    top_k=20
-):
-    reference_dict: { sample_id: reference_pts }
-    _clear_icp_caches()
-    results = []
-
-    for ref_id, ref_pts in reference_dict.items():
-        err, aligned = run_icp(
-            target_pts,
-            ref_pts,
-            iters=icp_params["iters"],
-            max_total_deg=icp_params["max_total_deg"],
-            max_scale_step=icp_params["max_scale_step"]
-        )
-        score, bbox = icp_score(ref_pts, aligned, ref_id=ref_id)
-        results.append((ref_id, score, aligned, bbox))
-
-    results.sort(key=lambda x: x[1])
-    return [
-        {
-            "id": rid,
-            "distance": float(score),
-            "aligned_target": aligned.tolist(),
-            "bbox": bbox
-        }
-        for rid, score, aligned, bbox in results
-        # for rid, score, aligned, bbox in results[:top_k]
-    ]
-"""
-
 def discrete_curvature(pts):
     """
     Signed discrete curvature.
@@ -374,38 +329,6 @@ def mean_angular_error(a, b):
     """
     delta = (a - b + np.pi) % (2 * np.pi) - np.pi
     return np.mean(np.abs(delta))
-
-def extract_tip_region(pts, percent=0.15):
-    """
-    Returns the top X% of points (tip region).
-    Assumes smaller Y = higher in image (after invert_yaxis logic).
-    """
-    if len(pts) < 10:
-        return None
-
-    y = pts[:, 1]
-    cutoff = np.percentile(y, percent * 100)
-
-    tip = pts[y <= cutoff]
-
-    if len(tip) < 5:
-        return None
-
-    # sort along main direction for stability
-    order = np.argsort(tip[:, 1])
-    return tip[order]
-
-def cut_bbox_by_line(points, p0, p1, keep_side=1):
-    """
-    Returns boolean mask:
-    True = point is on the kept side of the line p0→p1
-    keep_side = +1 or -1
-    """
-    # Line normal (2D cross product sign)
-    v = p1 - p0
-    w = points - p0
-    cross = v[0] * w[:, 1] - v[1] * w[:, 0]
-    return keep_side * cross >= 0
 
 def order_points_by_arclength(pts, k=6):
     key = (pts.shape[0], pts.tobytes())
@@ -515,6 +438,81 @@ def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1, target_pts):
 
     return np.array(clipped)
 
+def normalize_points_in_bbox(pts, bbox_poly, rail_dir):
+    """
+    Put points into a rail-aligned, normalized coordinate system.
+
+    Result:
+      - X axis: along rail, normalized to [0, 1]
+      - Y axis: across rail, normalized so bbox width = 1 (centered at 0)
+    """
+    rail_dir = rail_dir / (np.linalg.norm(rail_dir) + 1e-8)
+    width_dir = np.array([-rail_dir[1], rail_dir[0]])
+
+    bbox_poly = np.asarray(bbox_poly)
+
+    # Project bbox corners
+    s_bbox = bbox_poly @ rail_dir
+    w_bbox = bbox_poly @ width_dir
+
+    s_min, s_max = s_bbox.min(), s_bbox.max()
+    w_min, w_max = w_bbox.min(), w_bbox.max()
+
+    if (s_max - s_min) < 1e-8 or (w_max - w_min) < 1e-8:
+        return None
+
+    # Project points
+    s = pts @ rail_dir
+    w = pts @ width_dir
+
+    # Normalize
+    s_norm = (s - s_min) / (s_max - s_min)          # [0, 1]
+    w_norm = (w - 0.5 * (w_min + w_max)) / (w_max - w_min)  # centered, width=1
+
+    return np.column_stack([s_norm, w_norm])
+
+
+def mean_indexwise_distance(a, b):
+    """
+    Mean Euclidean distance between corresponding points.
+    a, b must have same shape (N, 2)
+    """
+    if a is None or b is None:
+        return None
+    if len(a) == 0 or len(b) == 0:
+        return None
+
+    m = min(len(a), len(b))
+    diff = a[:m] - b[:m]
+    return np.mean(np.linalg.norm(diff, axis=1))
+
+def weighted_indexwise_distance(a, b, center_frac=0.5, sigma_frac=0.1):
+    """
+    Weighted mean Euclidean distance between corresponding points.
+
+    center_frac : where the peak weight is (0–1, default middle)
+    sigma_frac  : controls how wide the high-weight region is
+                  ~0.1 → roughly indices 40–60 for N=100
+    """
+    if a is None or b is None:
+        return None
+
+    m = min(len(a), len(b))
+    if m == 0:
+        return None
+
+    diff = a[:m] - b[:m]
+    dists = np.linalg.norm(diff, axis=1)
+
+    idx = np.arange(m)
+    center = center_frac * (m - 1)
+    sigma = sigma_frac * m
+
+    weights = np.exp(-0.5 * ((idx - center) / sigma) ** 2)
+    weights /= weights.sum()
+
+    return float(np.sum(weights * dists))
+
 def icp_score(reference_pts,
               aligned_target_pts,
               ref_id=None):
@@ -580,6 +578,8 @@ def icp_score(reference_pts,
     k = max(5, int(0.15 * n))   # tail region near the end
 
     line20_pts, _ = make_points_on_target_rail(aligned_target_pts)
+    rail_vec = line20_pts[-1] - line20_pts[0]
+    rail_dir = rail_vec / (np.linalg.norm(rail_vec) + 1e-8)
     if line20_pts is None or len(line20_pts) < 2:
         return np.inf, None
 
@@ -624,13 +624,34 @@ def icp_score(reference_pts,
     # --------------------------------------------------
     # 2) Single-rail assumption inside bbox
     # --------------------------------------------------
-    tgt_rail = tgt_box
-    ref_rail = ref_box
+    # --- normalize target and reference into rail-aligned bbox space ---
+    tgt_norm = normalize_points_in_bbox(
+        aligned_target_pts,
+        bbox_poly,
+        rail_dir
+    )
 
-    tgt_line_pts, _ = make_points_on_target_rail(tgt_rail, n_points=100)
-    ref_line_pts, _ = make_points_on_reference_rail(
+    ref_norm = normalize_points_in_bbox(
         reference_pts,
         bbox_poly,
+        rail_dir
+    )
+
+    if tgt_norm is None or ref_norm is None:
+        return np.inf, None
+
+    # Unit bbox in normalized space
+    unit_bbox = np.array([
+        [0.0, -0.5],
+        [1.0, -0.5],
+        [1.0,  0.5],
+        [0.0,  0.5],
+    ])
+
+    tgt_line_pts, _ = make_points_on_target_rail(tgt_norm, n_points=100)
+    ref_line_pts, _ = make_points_on_reference_rail(
+        ref_norm,
+        unit_bbox,
         n_points=100
     )
 
@@ -666,52 +687,29 @@ def icp_score(reference_pts,
 
     direction_error = mean_angular_error(dir_tgt, dir_ref)
 
+    # --- index-by-index positional error ---
+    indexwise_error = weighted_indexwise_distance(
+        tgt_line_pts,
+        ref_line_pts,
+        center_frac=0.5,   # center at index ~50
+        sigma_frac=0.1     # emphasizes roughly 40–60
+    )
+
+    if indexwise_error is None:
+        return np.inf, None
+
     # --- weighted combination ---
     W_CURV = 1.0
-    W_DIR  = 0.5   # start conservative; increase if curvature dominates too much
+    W_DIR  = angle_weight
+    W_IDX  = 0.5   # positional weight (tune if needed)
 
-    score = W_CURV * curvature_error + W_DIR * direction_error
+    score = (
+        W_CURV * curvature_error +
+        W_DIR  * direction_error +
+        W_IDX  * indexwise_error
+    )
+
     return float(score), bbox_poly
-
-
-def clip_line_to_bbox(p0, p1, bbox_min, bbox_max):
-    """
-    Liang–Barsky line clipping.
-    Returns (q0, q1) or None if no intersection.
-    """
-    x0, y0 = p0
-    x1, y1 = p1
-
-    dx = x1 - x0
-    dy = y1 - y0
-
-    p = [-dx, dx, -dy, dy]
-    q = [
-        x0 - bbox_min[0],
-        bbox_max[0] - x0,
-        y0 - bbox_min[1],
-        bbox_max[1] - y0
-    ]
-
-    u1, u2 = 0.0, 1.0
-
-    for pi, qi in zip(p, q):
-        if pi == 0:
-            if qi < 0:
-                return None
-        else:
-            t = qi / pi
-            if pi < 0:
-                u1 = max(u1, t)
-            else:
-                u2 = min(u2, t)
-
-    if u1 > u2:
-        return None
-
-    q0 = np.array([x0 + u1 * dx, y0 + u1 * dy])
-    q1 = np.array([x0 + u2 * dx, y0 + u2 * dy])
-    return q0, q1
 
 def make_points_on_target_rail(target_pts, n_points=100):
     """
@@ -762,17 +760,6 @@ def make_points_on_reference_rail(reference_pts, bbox_poly, n_points=100):
 
     line_pts = np.column_stack([x, y])
     return line_pts, np.arange(n_points)
-def extend_line(p0, p1, scale=1000.0):
-    """
-    Extend line p0→p1 in both directions by a large factor.
-    """
-    v = p1 - p0
-    v /= (np.linalg.norm(v) + 1e-12)
-
-    q0 = p0 - scale * v
-    q1 = p0 + scale * v
-    return q0, q1
-
 
 def plot_icp_overlap(
     target_pts,
@@ -838,37 +825,6 @@ def plot_icp_overlap(
             s=10, color="blue",
             label="Used Template"
         )
-
-    """if line100_ref is not None:
-        ax.scatter(
-            line100_ref[:, 0],
-            line100_ref[:, 1],
-            s=28,
-            facecolors="none",
-            edgecolors="green",
-            linewidths=1.5,
-            label="Reference rail (100 pts)"
-        )
-        step = 20  # label every 20th point
-        for i in range(0, len(line100_ref), step):
-            p = line100_ref[i]
-            ax.text(
-                p[0], p[1],
-                str(i),
-                fontsize=10,
-                color="green",
-                ha="center",
-                va="center",
-                zorder=20,
-                clip_on=False,
-                bbox=dict(
-                    facecolor="white",
-                    edgecolor="green",
-                    linewidth=0.5,
-                    alpha=0.7,
-                    pad=0.5
-                )
-            )"""
     # --------------------------------------------------
     # 5) Split and plot target rails
     # --------------------------------------------------
@@ -878,16 +834,6 @@ def plot_icp_overlap(
         s=8, color="orange",
         label="Sample"
     )
-    """if line100_tgt is not None:
-        ax.scatter(
-            line100_tgt[:, 0],
-            line100_tgt[:, 1],
-            s=28,
-            facecolors="none",
-            edgecolors="red",
-            linewidths=1.5,
-            label="Target rail (100 pts)"
-        )"""
     # --------------------------------------------------
     # 6) Draw bounding box
     # --------------------------------------------------
@@ -906,8 +852,8 @@ def plot_icp_overlap(
     # --------------------------------------------------
     # 7) Average width lines
     # --------------------------------------------------
-    ref_seg = compute_centerline(reference_pts)
-    tgt_seg = compute_centerline(aligned_target_pts)
+    ref_seg = compute_centerline(reference_pts, slice_frac=0.8)
+    tgt_seg = compute_centerline(aligned_target_pts, slice_frac=0.5)
 
     if ref_seg is not None:
         ax.plot(ref_seg[:, 0], ref_seg[:, 1],
@@ -960,68 +906,111 @@ def plot_icp_overlap(
 
     return Image.open(buf)
 
-def precompute_icp_for_all_references(db_handler, n_points):
+def plot_normalized_bbox_points(
+    reference_pts,
+    aligned_target_pts,
+    bbox_poly,
+    rail_dir
+):
     """
-    Precompute and store ICP geometry for all reference SVGs.
+    Plot ONLY normalized bbox space:
+    - unit bbox
+    - normalized reference points
+    - normalized target points
     """
 
-    db_handler.use_collection("svg_template_types")
+    tgt_norm = normalize_points_in_bbox(
+        aligned_target_pts,
+        bbox_poly,
+        rail_dir
+    )
 
-    for doc in db_handler.collection.find(
-        {"cleaned_svg": {"$exists": True}},
-        {"sample_id": 1, "cleaned_svg": 1, "icp_data": 1}
-    ):
-        if "icp_data" in doc:
-            settings = doc["icp_data"].get("settings", {})
-            if settings.get("n_points") == n_points:
-                continue
+    ref_norm = normalize_points_in_bbox(
+        reference_pts,
+        bbox_poly,
+        rail_dir
+    )
 
-        try:
-            svg_string = doc.get("cropped_svg", doc["cleaned_svg"])
+    if tgt_norm is None or ref_norm is None:
+        return None
 
-            pts, avg_width = prepare_icp_geometry_from_svg_string(
-                svg_string,
-                n_points
-            )
+    # Unit bbox
+    unit_bbox = np.array([
+        [0.0, -0.5],
+        [1.0, -0.5],
+        [1.0,  0.5],
+        [0.0,  0.5],
+        [0.0, -0.5],
+    ])
 
-            icp_data = {
-                "outline_points": pts.tolist(),
-                "avg_width": avg_width,
-                "settings": {
-                    "n_points": n_points,
-                    "centering": "mean",
-                    "width_normalization": True
-                }
-            }
+    fig, ax = plt.subplots(figsize=(6, 3))
 
-            db_handler.collection.update_one(
-                {"sample_id": doc["sample_id"]},
-                {"$set": {"icp_data": icp_data}}
-            )
+    # Plot points
+    ax.scatter(
+        ref_norm[:, 0], ref_norm[:, 1],
+        s=8, color="blue", alpha=0.6,
+        label="Reference (normalized)"
+    )
 
-            print(f"[ICP] prepared reference {doc['sample_id']}")
+    ax.scatter(
+        tgt_norm[:, 0], tgt_norm[:, 1],
+        s=8, color="orange", alpha=0.6,
+        label="Target (normalized)"
+    )
 
-        except Exception as e:
-            print(f"[ICP] FAILED reference {doc['sample_id']}: {e}")
+    # Plot unit bbox
+    ax.plot(
+        unit_bbox[:, 0],
+        unit_bbox[:, 1],
+        color="black",
+        linewidth=2,
+        linestyle="--",
+        label="Normalized bbox"
+    )
 
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.6, 0.6)
+    ax.set_xlabel("Rail direction (normalized)")
+    ax.set_ylabel("Width (normalized)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
 
-def ensure_icp_geometry(doc, db_handler, n_points):
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format="png")
+    plt.close(fig)
+    buf.seek(0)
+
+    return Image.open(buf)
+
+def ensure_icp_geometry(doc, db_handler, n_points, role):
     """
     function to get info for icp method
     """
+    if role == "reference":
+        width_slice_frac = 0.8
+    elif role == "target":
+        width_slice_frac = 0.5
+    else:
+        raise ValueError(f"Unknown ICP geometry role: {role}")
     if doc is None:
         raise ValueError("ensure_icp_geometry called with doc=None")
 
-    if doc.get("icp_data"):
+    if role == "reference" and doc.get("icp_data"):
         settings = doc["icp_data"].get("settings", {})
-        if settings.get("n_points") == n_points:
+        if (
+            settings.get("n_points") == n_points and
+            settings.get("width_slice_frac") == width_slice_frac
+        ):
             return doc["icp_data"]
     
     svg_string = doc.get("cropped_svg", doc["cleaned_svg"])
 
     pts, avg_width = prepare_icp_geometry_from_svg_string(
         svg_string,
-        n_points
+        n_points,
+        width_slice_frac=width_slice_frac
     )
 
     icp_data = {
@@ -1030,7 +1019,9 @@ def ensure_icp_geometry(doc, db_handler, n_points):
         "settings": {
             "n_points": n_points,
             "centering": "mean",
-            "width_normalization": True
+            "width_normalization": True,
+            "width_slice_frac": width_slice_frac,
+            "role": role
         }
     }
 
@@ -1041,59 +1032,6 @@ def ensure_icp_geometry(doc, db_handler, n_points):
 
     return icp_data
 
-
-"""def find_icp_closest_matches(analysis_config, top_k=20):
-    db_handler = analysis_config["db_handler"]
-    sample_id = analysis_config["sample_id"]
-
-    n_target = analysis_config.get("icp_n_target", 300)
-    n_ref = analysis_config.get("icp_n_reference", 500)
-
-    icp_params = {
-        "iters": analysis_config.get("icp_iters", 30),
-        "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
-        "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
-        "top_percent": analysis_config.get("icp_top_percent", 0.2)
-    }
-
-    db_handler.use_collection("svg_raw")
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
-
-    icp_data = ensure_icp_geometry(doc, db_handler, n_target)
-    target_pts = np.array(icp_data["outline_points"])
-
-    db_handler.use_collection("svg_template_types")
-
-    precompute_icp_for_all_references(db_handler, n_ref)
-
-    refs = {}
-    for ref_doc in db_handler.collection.find({"icp_data": {"$exists": True}}):
-        refs[ref_doc["sample_id"]] = np.array(
-            ref_doc["icp_data"]["outline_points"]
-        )
-
-    matches = find_icp_matches(
-        target_pts,
-        refs,
-        icp_params,
-        top_k
-    )
-
-    db_handler.use_collection("svg_raw")
-    db_handler.collection.update_one(
-        {"sample_id": sample_id},
-        {"$set": {
-            "icp_matches": [
-                {"id": m["id"], "distance": m["distance"]}
-                for m in matches
-            ],
-            "icp_matches_valid": True,
-            "icp_settings": icp_params
-        }}
-    )
-    return matches
-"""
-
 def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_config):
     n_target = analysis_config.get("icp_n_target", 300)
     n_ref = analysis_config.get("icp_n_reference", 500)
@@ -1101,13 +1039,23 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
     # Load target
     db_handler.use_collection("svg_raw")
     target_doc = db_handler.collection.find_one({"sample_id": sample_id})
-    target_icp = ensure_icp_geometry(target_doc, db_handler, n_target)
+    target_icp = ensure_icp_geometry(
+        target_doc,
+        db_handler,
+        n_target,
+        role="target"
+    )
     target_pts = np.array(target_icp["outline_points"])
 
     # Load reference
     db_handler.use_collection("svg_template_types")
     ref_doc = db_handler.collection.find_one({"sample_id": template_id})
-    ref_icp = ensure_icp_geometry(ref_doc, db_handler, n_ref)
+    ref_icp = ensure_icp_geometry(
+        ref_doc,
+        db_handler,
+        n_ref,
+        role="reference"
+    )
     ref_pts = np.array(ref_icp["outline_points"])
 
     # Run ICP again (cheap at top-1 scale)
@@ -1115,8 +1063,8 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
         target_pts,
         ref_pts,
         iters=analysis_config.get("icp_iters", 30),
-        max_total_deg=analysis_config.get("icp_max_deg", 15.0),
-        max_scale_step=analysis_config.get("icp_max_scale", 0.2)
+        max_total_deg=analysis_config.get("icp_max_deg", max_degree),
+        max_scale_step=analysis_config.get("icp_max_scale", scaling_factor)
     )
 
     score, bbox = icp_score(ref_pts, aligned, ref_id=template_id)
@@ -1130,3 +1078,76 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
         ref_pts,
         bbox=bbox
     )
+    # --- compute rail direction for normalized plot ---
+    """line20_pts, _ = make_points_on_target_rail(aligned, n_points=20)
+    if line20_pts is None or len(line20_pts) < 2:
+        return None
+
+    rail_vec = line20_pts[-1] - line20_pts[0]
+    rail_dir = rail_vec / (np.linalg.norm(rail_vec) + 1e-8)
+
+    return plot_normalized_bbox_points(
+        ref_pts,
+        aligned,
+        bbox,
+        rail_dir
+    )"""
+
+def compute_icp_distance(
+    db_handler,
+    sample_id,
+    template_id,
+    analysis_config
+):
+    n_target = analysis_config.get("icp_n_target", 300)
+    n_ref = analysis_config.get("icp_n_reference", 500)
+
+    # --- load target ---
+    db_handler.use_collection("svg_raw")
+    target_doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if target_doc is None:
+        return float("inf")
+
+    try:
+        target_icp = ensure_icp_geometry(
+            target_doc, db_handler, n_target, role="target"
+        )
+        target_pts = np.array(target_icp["outline_points"])
+    except Exception:
+        return float("inf")
+
+    # --- load reference ---
+    db_handler.use_collection("svg_template_types")
+    ref_doc = db_handler.collection.find_one({"sample_id": template_id})
+    if ref_doc is None:
+        return float("inf")
+
+    try:
+        ref_icp = ensure_icp_geometry(
+            ref_doc, db_handler, n_ref, role="reference"
+        )
+        ref_pts = np.array(ref_icp["outline_points"])
+    except Exception:
+        return float("inf")
+
+    # --- run icp ---
+    try:
+        err, aligned = run_icp(
+            target_pts,
+            ref_pts,
+            iters=analysis_config.get("icp_iters", 30),
+            max_total_deg=analysis_config.get("icp_max_deg", max_degree),
+            max_scale_step=analysis_config.get("icp_max_scale", scaling_factor),
+        )
+
+        if not np.isfinite(err):
+            return float("inf")
+
+        score, _ = icp_score(ref_pts, aligned, ref_id=template_id)
+        if not np.isfinite(score):
+            return float("inf")
+
+        return float(score)
+
+    except Exception:
+        return float("inf")
