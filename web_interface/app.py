@@ -5,7 +5,11 @@ from web_interface.button_calls.button_add_rule import click_add_rule, load_rule
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg, update_analyze_button_color
 from web_interface.button_calls.button_csv_download import click_csv_download
 from web_interface.button_calls.button_csv_upload import click_csv_upload
-from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample
+from web_interface.button_calls.button_navigate_closest_sample import (
+    click_navigate_closest_sample,
+    click_select_closest_sample,
+    update_closest_match_dropdown,
+)
 from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_pin import click_pin_button
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
@@ -228,6 +232,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         index_display = gr.Markdown("-/-", elem_id="centered_md")
                         next_sample_button = gr.Button("→")
 
+                    # Jump directly to any match in the current closest_list_state
+                    closest_match_dropdown = gr.Dropdown(
+                        choices=[],
+                        value=None,
+                        label="Jump to match",
+                        interactive=True,
+                    )
+
             with gr.Row():
                 # Left column: inspected svg
                 with gr.Column(scale=1, min_width=400):
@@ -429,6 +441,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         fn=update_analyze_button_color,
         inputs=analysis_button_inputs,
         outputs=[analyze_button]
+    ).then(
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
     )
 
     save_type_button.click(
@@ -454,6 +470,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_sample_id_output,
             index_display
         ]
+    ).then(
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
     )
 
     previous_sample_button.click(
@@ -473,6 +493,45 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_sample_id_output,
             index_display
         ]
+    ).then(
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
+    )
+
+    # Dropdown jump (select any match)
+    closest_match_dropdown.change(
+        fn=click_select_closest_sample,
+        inputs=[
+            distance_type_dataset,
+            distance_value_dataset,
+            distance_calculation,
+            current_sample_state,
+            closest_list_state,
+            current_index_state,
+            smooth_method_dropdown,
+            smooth_factor,
+            smooth_window_slider,
+            samples,
+            closest_match_dropdown,
+        ],
+        outputs=[
+            closest_svg_output,
+            closest_icp_output,
+
+            closest_curvature_plot_output,
+            closest_curvature_color_output,
+            closest_angle_plot_output,
+
+            closest_template_synonymes,
+            current_index_state,
+            closest_sample_id_output,
+            index_display,
+        ],
+    ).then(
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
     )
 
     batch_analyse_button.click(
@@ -523,6 +582,10 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         fn=update_analyze_button_color,
         inputs=analysis_button_inputs,
         outputs=[analyze_button]
+    ).then(
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
     )
 
     # Dropdown change - loads from database and updates sliders
