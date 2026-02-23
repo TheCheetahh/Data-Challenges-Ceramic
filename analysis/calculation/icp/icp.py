@@ -13,7 +13,7 @@ _ORDER_CACHE = {}
 _SIGNED_WIDTH_CACHE = {}
 
 scaling_factor = 2.0
-angle_weight = 0.1
+angle_weight = 0.5
 max_degree = 15.0
 
 def _clear_icp_caches():
@@ -168,10 +168,15 @@ def run_icp(source_pts, target_pts,
         src = scale * (R_limited @ src.T).T + t
 
         err = np.mean(np.linalg.norm(matched_src - matched_dst, axis=1))
-        if err < best_err - 1e-6:
+        patience = 3
+
+        if err < best_err:
             best_err = err
+            patience = 3
         else:
-            break
+            patience -= 1
+            if patience <= 0:
+                break
 
     return float(best_err), src
 
@@ -433,6 +438,81 @@ def bbox_polygon_clipped_by_line(bbox_min, bbox_max, p0, p1, target_pts):
 
     return np.array(clipped)
 
+def normalize_points_in_bbox(pts, bbox_poly, rail_dir):
+    """
+    Put points into a rail-aligned, normalized coordinate system.
+
+    Result:
+      - X axis: along rail, normalized to [0, 1]
+      - Y axis: across rail, normalized so bbox width = 1 (centered at 0)
+    """
+    rail_dir = rail_dir / (np.linalg.norm(rail_dir) + 1e-8)
+    width_dir = np.array([-rail_dir[1], rail_dir[0]])
+
+    bbox_poly = np.asarray(bbox_poly)
+
+    # Project bbox corners
+    s_bbox = bbox_poly @ rail_dir
+    w_bbox = bbox_poly @ width_dir
+
+    s_min, s_max = s_bbox.min(), s_bbox.max()
+    w_min, w_max = w_bbox.min(), w_bbox.max()
+
+    if (s_max - s_min) < 1e-8 or (w_max - w_min) < 1e-8:
+        return None
+
+    # Project points
+    s = pts @ rail_dir
+    w = pts @ width_dir
+
+    # Normalize
+    s_norm = (s - s_min) / (s_max - s_min)          # [0, 1]
+    w_norm = (w - 0.5 * (w_min + w_max)) / (w_max - w_min)  # centered, width=1
+
+    return np.column_stack([s_norm, w_norm])
+
+
+def mean_indexwise_distance(a, b):
+    """
+    Mean Euclidean distance between corresponding points.
+    a, b must have same shape (N, 2)
+    """
+    if a is None or b is None:
+        return None
+    if len(a) == 0 or len(b) == 0:
+        return None
+
+    m = min(len(a), len(b))
+    diff = a[:m] - b[:m]
+    return np.mean(np.linalg.norm(diff, axis=1))
+
+def weighted_indexwise_distance(a, b, center_frac=0.5, sigma_frac=0.1):
+    """
+    Weighted mean Euclidean distance between corresponding points.
+
+    center_frac : where the peak weight is (0–1, default middle)
+    sigma_frac  : controls how wide the high-weight region is
+                  ~0.1 → roughly indices 40–60 for N=100
+    """
+    if a is None or b is None:
+        return None
+
+    m = min(len(a), len(b))
+    if m == 0:
+        return None
+
+    diff = a[:m] - b[:m]
+    dists = np.linalg.norm(diff, axis=1)
+
+    idx = np.arange(m)
+    center = center_frac * (m - 1)
+    sigma = sigma_frac * m
+
+    weights = np.exp(-0.5 * ((idx - center) / sigma) ** 2)
+    weights /= weights.sum()
+
+    return float(np.sum(weights * dists))
+
 def icp_score(reference_pts,
               aligned_target_pts,
               ref_id=None):
@@ -498,6 +578,8 @@ def icp_score(reference_pts,
     k = max(5, int(0.15 * n))   # tail region near the end
 
     line20_pts, _ = make_points_on_target_rail(aligned_target_pts)
+    rail_vec = line20_pts[-1] - line20_pts[0]
+    rail_dir = rail_vec / (np.linalg.norm(rail_vec) + 1e-8)
     if line20_pts is None or len(line20_pts) < 2:
         return np.inf, None
 
@@ -542,13 +624,34 @@ def icp_score(reference_pts,
     # --------------------------------------------------
     # 2) Single-rail assumption inside bbox
     # --------------------------------------------------
-    tgt_rail = tgt_box
-    ref_rail = ref_box
+    # --- normalize target and reference into rail-aligned bbox space ---
+    tgt_norm = normalize_points_in_bbox(
+        aligned_target_pts,
+        bbox_poly,
+        rail_dir
+    )
 
-    tgt_line_pts, _ = make_points_on_target_rail(tgt_rail, n_points=100)
-    ref_line_pts, _ = make_points_on_reference_rail(
+    ref_norm = normalize_points_in_bbox(
         reference_pts,
         bbox_poly,
+        rail_dir
+    )
+
+    if tgt_norm is None or ref_norm is None:
+        return np.inf, None
+
+    # Unit bbox in normalized space
+    unit_bbox = np.array([
+        [0.0, -0.5],
+        [1.0, -0.5],
+        [1.0,  0.5],
+        [0.0,  0.5],
+    ])
+
+    tgt_line_pts, _ = make_points_on_target_rail(tgt_norm, n_points=100)
+    ref_line_pts, _ = make_points_on_reference_rail(
+        ref_norm,
+        unit_bbox,
         n_points=100
     )
 
@@ -584,11 +687,28 @@ def icp_score(reference_pts,
 
     direction_error = mean_angular_error(dir_tgt, dir_ref)
 
+    # --- index-by-index positional error ---
+    indexwise_error = weighted_indexwise_distance(
+        tgt_line_pts,
+        ref_line_pts,
+        center_frac=0.5,   # center at index ~50
+        sigma_frac=0.1     # emphasizes roughly 40–60
+    )
+
+    if indexwise_error is None:
+        return np.inf, None
+
     # --- weighted combination ---
     W_CURV = 1.0
-    W_DIR  = angle_weight   # start conservative; increase if curvature dominates too much
+    W_DIR  = angle_weight
+    W_IDX  = 0.5   # positional weight (tune if needed)
 
-    score = W_CURV * curvature_error + W_DIR * direction_error
+    score = (
+        W_CURV * curvature_error +
+        W_DIR  * direction_error +
+        W_IDX  * indexwise_error
+    )
+
     return float(score), bbox_poly
 
 def make_points_on_target_rail(target_pts, n_points=100):
@@ -786,6 +906,84 @@ def plot_icp_overlap(
 
     return Image.open(buf)
 
+def plot_normalized_bbox_points(
+    reference_pts,
+    aligned_target_pts,
+    bbox_poly,
+    rail_dir
+):
+    """
+    Plot ONLY normalized bbox space:
+    - unit bbox
+    - normalized reference points
+    - normalized target points
+    """
+
+    tgt_norm = normalize_points_in_bbox(
+        aligned_target_pts,
+        bbox_poly,
+        rail_dir
+    )
+
+    ref_norm = normalize_points_in_bbox(
+        reference_pts,
+        bbox_poly,
+        rail_dir
+    )
+
+    if tgt_norm is None or ref_norm is None:
+        return None
+
+    # Unit bbox
+    unit_bbox = np.array([
+        [0.0, -0.5],
+        [1.0, -0.5],
+        [1.0,  0.5],
+        [0.0,  0.5],
+        [0.0, -0.5],
+    ])
+
+    fig, ax = plt.subplots(figsize=(6, 3))
+
+    # Plot points
+    ax.scatter(
+        ref_norm[:, 0], ref_norm[:, 1],
+        s=8, color="blue", alpha=0.6,
+        label="Reference (normalized)"
+    )
+
+    ax.scatter(
+        tgt_norm[:, 0], tgt_norm[:, 1],
+        s=8, color="orange", alpha=0.6,
+        label="Target (normalized)"
+    )
+
+    # Plot unit bbox
+    ax.plot(
+        unit_bbox[:, 0],
+        unit_bbox[:, 1],
+        color="black",
+        linewidth=2,
+        linestyle="--",
+        label="Normalized bbox"
+    )
+
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.6, 0.6)
+    ax.set_xlabel("Rail direction (normalized)")
+    ax.set_ylabel("Width (normalized)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format="png")
+    plt.close(fig)
+    buf.seek(0)
+
+    return Image.open(buf)
+
 def ensure_icp_geometry(doc, db_handler, n_points, role):
     """
     function to get info for icp method
@@ -880,6 +1078,20 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
         ref_pts,
         bbox=bbox
     )
+    # --- compute rail direction for normalized plot ---
+    """line20_pts, _ = make_points_on_target_rail(aligned, n_points=20)
+    if line20_pts is None or len(line20_pts) < 2:
+        return None
+
+    rail_vec = line20_pts[-1] - line20_pts[0]
+    rail_dir = rail_vec / (np.linalg.norm(rail_vec) + 1e-8)
+
+    return plot_normalized_bbox_points(
+        ref_pts,
+        aligned,
+        bbox,
+        rail_dir
+    )"""
 
 def compute_icp_distance(
     db_handler,
