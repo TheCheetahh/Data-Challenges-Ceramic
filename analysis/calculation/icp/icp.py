@@ -119,7 +119,7 @@ def nearest_neighbor_correspondences(src, dst):
 def run_icp(source_pts, target_pts,
             iters=30,
             max_total_deg=max_degree,
-            max_scale_step=angle_weight):
+            max_scale_step=scaling_factor):
 
     src = source_pts.copy()
     dst = target_pts.copy()
@@ -278,41 +278,6 @@ def adjust_bbox_to_include_split_rails(reference_pts, bbox_min, bbox_max,
             bbox_max = np.maximum(bbox_max, rail_pts.max(axis=0))
 
     return bbox_min, bbox_max
-"""
-def find_icp_matches(
-    target_pts,
-    reference_dict,
-    icp_params,
-    top_k=20
-):
-    reference_dict: { sample_id: reference_pts }
-    _clear_icp_caches()
-    results = []
-
-    for ref_id, ref_pts in reference_dict.items():
-        err, aligned = run_icp(
-            target_pts,
-            ref_pts,
-            iters=icp_params["iters"],
-            max_total_deg=icp_params["max_total_deg"],
-            max_scale_step=icp_params["max_scale_step"]
-        )
-        score, bbox = icp_score(ref_pts, aligned, ref_id=ref_id)
-        results.append((ref_id, score, aligned, bbox))
-
-    results.sort(key=lambda x: x[1])
-    return [
-        {
-            "id": rid,
-            "distance": float(score),
-            "aligned_target": aligned.tolist(),
-            "bbox": bbox
-        }
-        for rid, score, aligned, bbox in results
-        # for rid, score, aligned, bbox in results[:top_k]
-    ]
-"""
-
 def discrete_curvature(pts):
     """
     Signed discrete curvature.
@@ -359,38 +324,6 @@ def mean_angular_error(a, b):
     """
     delta = (a - b + np.pi) % (2 * np.pi) - np.pi
     return np.mean(np.abs(delta))
-
-def extract_tip_region(pts, percent=0.15):
-    """
-    Returns the top X% of points (tip region).
-    Assumes smaller Y = higher in image (after invert_yaxis logic).
-    """
-    if len(pts) < 10:
-        return None
-
-    y = pts[:, 1]
-    cutoff = np.percentile(y, percent * 100)
-
-    tip = pts[y <= cutoff]
-
-    if len(tip) < 5:
-        return None
-
-    # sort along main direction for stability
-    order = np.argsort(tip[:, 1])
-    return tip[order]
-
-def cut_bbox_by_line(points, p0, p1, keep_side=1):
-    """
-    Returns boolean mask:
-    True = point is on the kept side of the line p0→p1
-    keep_side = +1 or -1
-    """
-    # Line normal (2D cross product sign)
-    v = p1 - p0
-    w = points - p0
-    cross = v[0] * w[:, 1] - v[1] * w[:, 0]
-    return keep_side * cross >= 0
 
 def order_points_by_arclength(pts, k=6):
     key = (pts.shape[0], pts.tobytes())
@@ -658,46 +591,6 @@ def icp_score(reference_pts,
     score = W_CURV * curvature_error + W_DIR * direction_error
     return float(score), bbox_poly
 
-
-def clip_line_to_bbox(p0, p1, bbox_min, bbox_max):
-    """
-    Liang–Barsky line clipping.
-    Returns (q0, q1) or None if no intersection.
-    """
-    x0, y0 = p0
-    x1, y1 = p1
-
-    dx = x1 - x0
-    dy = y1 - y0
-
-    p = [-dx, dx, -dy, dy]
-    q = [
-        x0 - bbox_min[0],
-        bbox_max[0] - x0,
-        y0 - bbox_min[1],
-        bbox_max[1] - y0
-    ]
-
-    u1, u2 = 0.0, 1.0
-
-    for pi, qi in zip(p, q):
-        if pi == 0:
-            if qi < 0:
-                return None
-        else:
-            t = qi / pi
-            if pi < 0:
-                u1 = max(u1, t)
-            else:
-                u2 = min(u2, t)
-
-    if u1 > u2:
-        return None
-
-    q0 = np.array([x0 + u1 * dx, y0 + u1 * dy])
-    q1 = np.array([x0 + u2 * dx, y0 + u2 * dy])
-    return q0, q1
-
 def make_points_on_target_rail(target_pts, n_points=100):
     """
     Sample points along a single continuous rail
@@ -747,17 +640,6 @@ def make_points_on_reference_rail(reference_pts, bbox_poly, n_points=100):
 
     line_pts = np.column_stack([x, y])
     return line_pts, np.arange(n_points)
-def extend_line(p0, p1, scale=1000.0):
-    """
-    Extend line p0→p1 in both directions by a large factor.
-    """
-    v = p1 - p0
-    v /= (np.linalg.norm(v) + 1e-12)
-
-    q0 = p0 - scale * v
-    q1 = p0 + scale * v
-    return q0, q1
-
 
 def plot_icp_overlap(
     target_pts,
@@ -823,37 +705,6 @@ def plot_icp_overlap(
             s=10, color="blue",
             label="Used Template"
         )
-
-    """if line100_ref is not None:
-        ax.scatter(
-            line100_ref[:, 0],
-            line100_ref[:, 1],
-            s=28,
-            facecolors="none",
-            edgecolors="green",
-            linewidths=1.5,
-            label="Reference rail (100 pts)"
-        )
-        step = 20  # label every 20th point
-        for i in range(0, len(line100_ref), step):
-            p = line100_ref[i]
-            ax.text(
-                p[0], p[1],
-                str(i),
-                fontsize=10,
-                color="green",
-                ha="center",
-                va="center",
-                zorder=20,
-                clip_on=False,
-                bbox=dict(
-                    facecolor="white",
-                    edgecolor="green",
-                    linewidth=0.5,
-                    alpha=0.7,
-                    pad=0.5
-                )
-            )"""
     # --------------------------------------------------
     # 5) Split and plot target rails
     # --------------------------------------------------
@@ -863,16 +714,6 @@ def plot_icp_overlap(
         s=8, color="orange",
         label="Sample"
     )
-    """if line100_tgt is not None:
-        ax.scatter(
-            line100_tgt[:, 0],
-            line100_tgt[:, 1],
-            s=28,
-            facecolors="none",
-            edgecolors="red",
-            linewidths=1.5,
-            label="Target rail (100 pts)"
-        )"""
     # --------------------------------------------------
     # 6) Draw bounding box
     # --------------------------------------------------
@@ -945,52 +786,6 @@ def plot_icp_overlap(
 
     return Image.open(buf)
 
-def precompute_icp_for_all_references(db_handler, n_points):
-    """
-    Precompute and store ICP geometry for all reference SVGs.
-    """
-
-    db_handler.use_collection("svg_template_types")
-
-    for doc in db_handler.collection.find(
-        {"cleaned_svg": {"$exists": True}},
-        {"sample_id": 1, "cleaned_svg": 1, "icp_data": 1}
-    ):
-        if "icp_data" in doc:
-            settings = doc["icp_data"].get("settings", {})
-            if settings.get("n_points") == n_points:
-                continue
-
-        try:
-            svg_string = doc.get("cropped_svg", doc["cleaned_svg"])
-
-            pts, avg_width = prepare_icp_geometry_from_svg_string(
-                svg_string,
-                n_points,
-                width_slice_frac=0.8
-            )
-
-            icp_data = {
-                "outline_points": pts.tolist(),
-                "avg_width": avg_width,
-                "settings": {
-                    "n_points": n_points,
-                    "centering": "mean",
-                    "width_normalization": True
-                }
-            }
-
-            db_handler.collection.update_one(
-                {"sample_id": doc["sample_id"]},
-                {"$set": {"icp_data": icp_data}}
-            )
-
-            print(f"[ICP] prepared reference {doc['sample_id']}")
-
-        except Exception as e:
-            print(f"[ICP] FAILED reference {doc['sample_id']}: {e}")
-
-
 def ensure_icp_geometry(doc, db_handler, n_points, role):
     """
     function to get info for icp method
@@ -1039,59 +834,6 @@ def ensure_icp_geometry(doc, db_handler, n_points, role):
 
     return icp_data
 
-
-"""def find_icp_closest_matches(analysis_config, top_k=20):
-    db_handler = analysis_config["db_handler"]
-    sample_id = analysis_config["sample_id"]
-
-    n_target = analysis_config.get("icp_n_target", 300)
-    n_ref = analysis_config.get("icp_n_reference", 500)
-
-    icp_params = {
-        "iters": analysis_config.get("icp_iters", 30),
-        "max_total_deg": analysis_config.get("icp_max_deg", 2.0),
-        "max_scale_step": analysis_config.get("icp_max_scale", 0.2),
-        "top_percent": analysis_config.get("icp_top_percent", 0.2)
-    }
-
-    db_handler.use_collection("svg_raw")
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
-
-    icp_data = ensure_icp_geometry(doc, db_handler, n_target)
-    target_pts = np.array(icp_data["outline_points"])
-
-    db_handler.use_collection("svg_template_types")
-
-    precompute_icp_for_all_references(db_handler, n_ref)
-
-    refs = {}
-    for ref_doc in db_handler.collection.find({"icp_data": {"$exists": True}}):
-        refs[ref_doc["sample_id"]] = np.array(
-            ref_doc["icp_data"]["outline_points"]
-        )
-
-    matches = find_icp_matches(
-        target_pts,
-        refs,
-        icp_params,
-        top_k
-    )
-
-    db_handler.use_collection("svg_raw")
-    db_handler.collection.update_one(
-        {"sample_id": sample_id},
-        {"$set": {
-            "icp_matches": [
-                {"id": m["id"], "distance": m["distance"]}
-                for m in matches
-            ],
-            "icp_matches_valid": True,
-            "icp_settings": icp_params
-        }}
-    )
-    return matches
-"""
-
 def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_config):
     n_target = analysis_config.get("icp_n_target", 300)
     n_ref = analysis_config.get("icp_n_reference", 500)
@@ -1124,7 +866,7 @@ def generate_icp_overlap_image(db_handler, sample_id, template_id, analysis_conf
         ref_pts,
         iters=analysis_config.get("icp_iters", 30),
         max_total_deg=analysis_config.get("icp_max_deg", max_degree),
-        max_scale_step=analysis_config.get("icp_max_scale", angle_weight)
+        max_scale_step=analysis_config.get("icp_max_scale", scaling_factor)
     )
 
     score, bbox = icp_score(ref_pts, aligned, ref_id=template_id)
@@ -1183,7 +925,7 @@ def compute_icp_distance(
             ref_pts,
             iters=analysis_config.get("icp_iters", 30),
             max_total_deg=analysis_config.get("icp_max_deg", max_degree),
-            max_scale_step=analysis_config.get("icp_max_scale", angle_weight),
+            max_scale_step=analysis_config.get("icp_max_scale", scaling_factor),
         )
 
         if not np.isfinite(err):
