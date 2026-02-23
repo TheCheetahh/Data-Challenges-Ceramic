@@ -12,61 +12,33 @@ def laa_calculation(analysis_config, template_doc, template_id):
 
     # set vars from analysis_config
     sample_id = analysis_config.get("sample_id")
-    top_k = analysis_config.get("top_k")
-    distance_value_dataset = analysis_config.get("distance_value_dataset")
-    db_handler = MongoDBHandler("svg_data")
-    db_handler.use_collection("svg_template_types")
-
+    db_handler = MongoDBHandler("svg_data") # needs to be new to work in parallel
     db_handler.use_collection("svg_raw")
 
     # get the sample from db and its curvature and direction (angle)
     doc = db_handler.collection.find_one({"sample_id": sample_id})
     if not doc or "curvature_data" not in doc:
         return None, None, f"No curvature data for sample_id {sample_id}"
-
     sample_curvature = np.array(doc["curvature_data"]["curvature"])
-    sample_direction = np.array(doc["curvature_data"]["directions"])
+    sample_direction = np.array(doc["curvature_data"]["directions"]) # angle
 
-    db_handler.use_collection("svg_template_types")
-
-    curv_data = template_doc.get("curvature_data")
-    if not curv_data:
-        return None
-
-    # get other samples data
-    template_curvature = np.array(curv_data["curvature"])
-    template_direction = np.array(curv_data["directions"])
-
-    # get amount of elements in the cropped 10%
-    curve_len = len(sample_curvature)
-    crop = int(curve_len * 0.10)
-    if curve_len <= 2 * crop:
-        return None
-
-    n_samples = analysis_config.get("n_samples")
-    # validate arrays
+    n_sample_points = analysis_config.get("n_samples")
+    # validate array
     if sample_direction is None:
         return None
-    n_shard = len(sample_direction)
-    if n_shard < 20:
-        return None
+    sample_direction_len = len(sample_direction)
 
     # Convert sample directions to degrees in [-180, 180]
     direction_deg = np.degrees(sample_direction)
     direction_deg = ((direction_deg + 180) % 360) - 180
 
-    # Find candidates zero-crossings for the shard
+    # Find candidates zero-crossings for the sample
     shard_candidates = find_all_lip_index_by_angle(sample_direction)
     if len(shard_candidates) == 0:
         print("No shard candidates found")
         return None
 
     # Load template SVG from DB
-    db_handler = MongoDBHandler("svg_data")
-    db_handler.use_collection("svg_template_types")
-    template_doc = db_handler.collection.find_one({"sample_id": template_id})
-    if template_doc is None or "raw_content" not in template_doc:
-        return None
     raw_template_svg = io.StringIO(template_doc["raw_content"])
     paths, _ = svg2paths(raw_template_svg)
     if len(paths) == 0:
@@ -75,52 +47,37 @@ def laa_calculation(analysis_config, template_doc, template_id):
 
     # Ternary search over n_resample
     min_distance = np.inf
-    best_dir_aligned_crop = None
-    best_shard_candidate = None
-    best_template_candidate = None
 
-    left = n_samples  # start from usual n_samples
-    right = 20000  # maximum resample
+    left = n_sample_points  # start from usual n_samples
+    right = 40000  # maximum resample
 
-    while left < right:
-
+    while right - left > 1:
         mid1 = left + (right - left) // 3
         mid2 = left + 2 * (right - left) // 3
-        dist1, crop1, shard1, temp1 = compute_distance_for_resample(
-            path_template, shard_candidates, direction_deg, n_shard, mid1
+
+        dist1, _, _, _ = compute_distance_for_resample(
+            path_template, shard_candidates, direction_deg, sample_direction_len, mid1
         )
-        dist2, crop2, shard2, temp2 = compute_distance_for_resample(
-            path_template, shard_candidates, direction_deg, n_shard, mid2
+        dist2, _, _, _ = compute_distance_for_resample(
+            path_template, shard_candidates, direction_deg, sample_direction_len, mid2
         )
 
-        # Shrink search interval
         if dist1 < dist2:
             right = mid2 - 1
+            if dist1 < min_distance:
+                min_distance = dist1
         else:
             left = mid1 + 1
-
-        # Track overall minimum
-        if dist1 < min_distance:
-            min_distance = dist1
-            best_dir_aligned_crop = crop1
-            best_shard_candidate = shard1
-            best_template_candidate = temp1
-        if dist2 < min_distance:
-            min_distance = dist2
-            best_dir_aligned_crop = crop2
-            best_shard_candidate = shard2
-            best_template_candidate = temp2
+            if dist2 < min_distance:
+                min_distance = dist2
 
     if not np.isfinite(min_distance):
         return None
 
-    if best_dir_aligned_crop is not None:
-        # print("Debug: theory calc")
-        pass
     return float(min_distance)
 
 
-def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin=0.05):
+def find_all_lip_index_by_angle(directions, angle_tolerance_deg=3.0, edge_margin=0.05):
     if len(directions) == 0:
         return []
 
@@ -133,28 +90,33 @@ def find_all_lip_index_by_angle(directions, angle_tolerance_deg=5.0, edge_margin
     idx_range = np.arange(start, end)
 
     abs_dev = np.abs(angles_deg[idx_range])
-    candidate_mask = abs_dev <= angle_tolerance_deg
-    candidate_indices = idx_range[candidate_mask]
 
-    if len(candidate_indices) == 0:
-        # fallback: pick the closest to zero
+    from scipy.signal import find_peaks
+
+    min_distance = max(1, int(0.01 * n))  # 1% of path length
+
+    peaks, _ = find_peaks(-abs_dev, distance=min_distance)
+
+    candidates = [idx_range[p] for p in peaks if abs_dev[p] <= angle_tolerance_deg]
+
+    if len(candidates) == 0:
         fallback_idx = idx_range[np.argmin(abs_dev)]
-        candidate_indices = [fallback_idx]
+        return [fallback_idx]
 
-    # remove consecutive duplicates
-    candidates_filtered = [candidate_indices[0]]
-    for idx in candidate_indices[1:]:
-        if idx - candidates_filtered[-1] > 1:
-            candidates_filtered.append(idx)
+    # print(len(candidates))
 
-    return candidates_filtered
+    return candidates
 
 
 def compute_distance_for_resample(path_template, shard_candidates, direction_deg, n_shard, n_resample):
+
+    # setup the points on the template. n_resample is the amount of points
     ts = np.linspace(0, 1, n_resample)
     points = np.array([path_template.point(t) for t in ts])
     points = np.column_stack((points.real, points.imag))
-    points = normalize_path(points, smooth_method="savgol", smooth_factor=0.02, smooth_window=15)
+
+    smooth_window = max(5, int(0.005 * n_resample))  # 0.5% of current point count
+    points = normalize_path(points, smooth_method="savgol", smooth_factor=2, smooth_window=smooth_window)
 
     diffs = np.diff(points, axis=0)
     dir_template = np.arctan2(diffs[:, 1], diffs[:, 0])
@@ -178,6 +140,7 @@ def compute_distance_for_resample(path_template, shard_candidates, direction_deg
             dir_aligned_deg = np.roll(dir_template_deg, shift)
             dir_aligned_crop = dir_aligned_deg[:n_shard]
             diffs_angle = direction_deg[:len(dir_aligned_crop)] - dir_aligned_crop
+            diffs_angle = ((diffs_angle + 180) % 360) - 180  # re-wrap the difference
             distance_val = np.mean(diffs_angle ** 2)
             if distance_val < local_min:
                 local_min = distance_val
