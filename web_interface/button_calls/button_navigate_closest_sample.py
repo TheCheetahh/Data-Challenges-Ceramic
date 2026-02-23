@@ -99,9 +99,9 @@ def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset,
 
     else:
         # laa case. Gets the template svg
-        svg_html, _ = generate_graph(analysis_config, next_id, "template", "get_template")
-        svg_update = gr.update(value=svg_html, visible=True)
-        icp_update = gr.update(visible=False)
+        svg_update = gr.update(visible=False)
+        icp_img, _ = generate_graph(analysis_config, next_id, "template", "overlap_plot")
+        icp_update = gr.update(value=icp_img, visible=True)
 
     db_handler.use_collection("svg_synonym_rules")
     rule = db_handler.collection.find_one({"members": next_id})

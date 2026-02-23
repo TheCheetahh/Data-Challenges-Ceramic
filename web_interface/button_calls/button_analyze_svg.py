@@ -141,7 +141,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
                 closest_icp_img, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
             else: # laa
                 # get template SVG (specifically for laa)
-                closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
+                closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
             # Load curvature data of closest match and generate plots
             closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")
             closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
@@ -160,15 +160,12 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_angle_img = None
         closest_id_text = "No closest match found"
 
-
-
-    # is output image
     if distance_value_dataset == "ICP":
         closest_icp_output = gr.update(value=closest_icp_img, visible=True)
         closest_svg_output = gr.update(visible=False)
-    else: # or html-svg
-        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
-        closest_icp_output = gr.update(visible=False)
+    else:
+        closest_icp_output = gr.update(visible=True, value=closest_svg_output)
+        closest_svg_output = gr.update(visible=False)
 
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")

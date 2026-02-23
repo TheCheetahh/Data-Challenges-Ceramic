@@ -12,53 +12,50 @@ def laa_calculation(analysis_config, template_doc, template_id):
 
     # set vars from analysis_config
     sample_id = analysis_config.get("sample_id")
-    db_handler = MongoDBHandler("svg_data") # needs to be new to work in parallel
+    db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
 
-    # get the sample from db and its curvature and direction (angle)
     doc = db_handler.collection.find_one({"sample_id": sample_id})
     if not doc or "curvature_data" not in doc:
-        return None, None, f"No curvature data for sample_id {sample_id}"
+        return None
     sample_curvature = np.array(doc["curvature_data"]["curvature"])
-    sample_direction = np.array(doc["curvature_data"]["directions"]) # angle
+    sample_direction = np.array(doc["curvature_data"]["directions"])
 
     n_sample_points = analysis_config.get("n_samples")
-    # validate array
     if sample_direction is None:
         return None
     sample_direction_len = len(sample_direction)
 
-    # Convert sample directions to degrees in [-180, 180]
     direction_deg = np.degrees(sample_direction)
     direction_deg = ((direction_deg + 180) % 360) - 180
 
-    # Find candidates zero-crossings for the sample
     shard_candidates = find_all_lip_index_by_angle(sample_direction)
     if len(shard_candidates) == 0:
         print("No shard candidates found")
         return None
 
-    # Load template SVG from DB
     raw_template_svg = io.StringIO(template_doc["raw_content"])
     paths, _ = svg2paths(raw_template_svg)
     if len(paths) == 0:
         return None
     path_template = paths[0]
 
-    # Ternary search over n_resample
     min_distance = np.inf
+    best_n_resample = None
+    best_shard_idx = None
+    best_template_idx = None
 
-    left = n_sample_points  # start from usual n_samples
-    right = 40000  # maximum resample
+    left = n_sample_points
+    right = 40000
 
     while right - left > 1:
         mid1 = left + (right - left) // 3
         mid2 = left + 2 * (right - left) // 3
 
-        dist1, _, _, _ = compute_distance_for_resample(
+        dist1, _, shard1, temp1 = compute_distance_for_resample(
             path_template, shard_candidates, direction_deg, sample_direction_len, mid1
         )
-        dist2, _, _, _ = compute_distance_for_resample(
+        dist2, _, shard2, temp2 = compute_distance_for_resample(
             path_template, shard_candidates, direction_deg, sample_direction_len, mid2
         )
 
@@ -66,13 +63,27 @@ def laa_calculation(analysis_config, template_doc, template_id):
             right = mid2 - 1
             if dist1 < min_distance:
                 min_distance = dist1
+                best_n_resample = mid1
+                best_shard_idx = shard1
+                best_template_idx = temp1
         else:
             left = mid1 + 1
             if dist2 < min_distance:
                 min_distance = dist2
+                best_n_resample = mid2
+                best_shard_idx = shard2
+                best_template_idx = temp2
 
     if not np.isfinite(min_distance):
         return None
+
+    # Save visualization data to database
+    db_handler.use_collection("svg_raw")
+    db_handler.collection.update_one(
+        {"sample_id": sample_id},
+        {"$push": {
+            "laa_overlap_data": (template_id, int(best_n_resample), int(best_shard_idx), int(best_template_idx))}}
+    )
 
     return float(min_distance)
 
