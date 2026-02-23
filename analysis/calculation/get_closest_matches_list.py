@@ -29,8 +29,14 @@ def get_closest_matches_list(analysis_config):
 
         template_docs = list(db_handler.collection.find(
             {"sample_id": {"$ne": sample_id}},
-            {"sample_id": 1, "curvature_data": 1,"raw_content": 1}
+            {"sample_id": 1, "curvature_data": 1, "raw_content": 1}
         ))
+
+        # Clear old overlap data before recalculating
+        db_handler.collection.update_one(
+            {"sample_id": sample_id},
+            {"$unset": {"laa_overlap_data": ""}}
+        )
 
         db_handler = analysis_config.pop("db_handler")
 

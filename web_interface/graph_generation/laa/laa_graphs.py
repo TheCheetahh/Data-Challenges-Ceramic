@@ -1,8 +1,9 @@
-import io
-
 import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 from PIL import Image
+import io
+import numpy as np
 from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from svgpathtools import svg2paths
@@ -154,3 +155,70 @@ def laa_generate_direction_lineplot(target_id, target_type):
     plt.close()
     buf.seek(0)
     return Image.open(buf), f"✅ Direction plot generated for sample_id {sample_id}"
+
+
+def visualize_laa_overlap(analysis_config, template_id):
+    db_handler = analysis_config.get("db_handler")
+    sample_id = analysis_config.get("sample_id")
+
+    # Load sample doc
+    db_handler.use_collection("svg_raw")
+    sample_doc = db_handler.collection.find_one({"sample_id": sample_id})
+    if not sample_doc:
+        return None, f"Sample {sample_id} not found"
+
+    # Find the overlap data for this specific template
+    laa_overlap_data = sample_doc.get("laa_overlap_data", [])
+    overlap_entry = next((e for e in laa_overlap_data if e[0] == template_id), None)
+    if overlap_entry is None:
+        return None, f"No overlap data found for template {template_id}"
+
+    _, best_n_resample, best_shard_idx, best_template_idx = overlap_entry
+
+    # Generate sample points from SVG
+    sample_svg = sample_doc.get("cropped_svg") or sample_doc.get("cleaned_svg")
+    if not sample_svg:
+        return None, "No SVG found for sample"
+    sample_paths, _ = svg2paths(io.StringIO(sample_svg))
+    if len(sample_paths) == 0:
+        return None, "No paths in sample SVG"
+    sample_path = sample_paths[0]
+    sample_ts = np.linspace(0, 1, best_n_resample)
+    sample_points = np.array([sample_path.point(t) for t in sample_ts])
+    sample_points = np.column_stack((sample_points.real, sample_points.imag))
+
+    # Load template SVG
+    db_handler.use_collection("svg_template_types")
+    template_doc = db_handler.collection.find_one({"sample_id": template_id})
+    if not template_doc or "raw_content" not in template_doc:
+        return None, f"Template {template_id} not found"
+    template_paths, _ = svg2paths(io.StringIO(template_doc["raw_content"]))
+    if len(template_paths) == 0:
+        return None, "No paths in template SVG"
+    path_template = template_paths[0]
+
+    # Sample points on template
+    ts = np.linspace(0, 1, best_n_resample)
+    template_points = np.array([path_template.point(t) for t in ts])
+    template_points = np.column_stack((template_points.real, template_points.imag))
+
+    # Shift both so their 0° points align at origin
+    sample_aligned = sample_points - sample_points[best_shard_idx]
+    template_aligned = template_points - template_points[best_template_idx]
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot(sample_aligned[:, 0], sample_aligned[:, 1], color="orange", linewidth=1.5, label="Sample")
+    ax.plot(template_aligned[:, 0], template_aligned[:, 1], color="blue", linewidth=1.5, label="Template")
+    ax.scatter([0], [0], color="red", zorder=5, label="Alignment point (0°)")
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+    ax.legend()
+    ax.set_title(f"LAA Overlap: {sample_id} vs {template_id}")
+
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format="png")
+    plt.close(fig)
+    buf.seek(0)
+    return Image.open(buf), "OK"
