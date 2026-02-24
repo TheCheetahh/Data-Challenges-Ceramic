@@ -5,7 +5,11 @@ from web_interface.button_calls.button_add_rule import click_add_rule, load_rule
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg, update_analyze_button_color
 from web_interface.button_calls.button_csv_download import click_csv_download
 from web_interface.button_calls.button_csv_upload import click_csv_upload
-from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample, update_closest_match_dropdown, click_select_closest_sample
+from web_interface.button_calls.button_navigate_closest_sample import (
+    click_navigate_closest_sample,
+    click_select_closest_sample,
+    update_closest_match_dropdown,
+)
 from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_pin import click_pin_button
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
@@ -45,6 +49,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     current_index_state = gr.State(0)
     next_index_one = gr.State(1)
     prev_index_one = gr.State(-1)
+    # IMPORTANT: We use Dropdown.input (user-only) instead of Dropdown.change.
+    # This avoids double-loading when the dropdown value is updated programmatically.
 
     # Needed for svg uploads
     state_svg_type_sample = gr.State("sample")
@@ -563,7 +569,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     )
 
     # Jump-to-match dropdown
-    closest_match_dropdown.change(
+    # Use `.input` (user interaction only). Programmatic updates via gr.update(value=...) do NOT trigger this.
+    closest_match_dropdown.input(
         fn=click_select_closest_sample,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
                 smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, closest_match_dropdown],
@@ -580,10 +587,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
             closest_sample_id_output,
             index_display,
         ],
-    ).then(
-        fn=update_closest_match_dropdown,
-        inputs=[closest_list_state, current_index_state],
-        outputs=[closest_match_dropdown],
     )
 
     # Dropdown change - loads from database and updates sliders
