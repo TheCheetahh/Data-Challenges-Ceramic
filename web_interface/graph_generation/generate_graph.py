@@ -18,9 +18,17 @@ def generate_graph(analysis_config, target_id, target_type, graph_type):
     graph = None
     message = None
 
-    if distance_value_dataset == "Keypoints":
+    if distance_value_dataset == "Orb":
         graph = None
         message = "Keypoints have no graphs yet"
+        if graph_type == "get_template":
+            graph, message = laa_get_template_svg(target_id)
+
+    elif distance_value_dataset == "DISK":
+        graph = None
+        message = "Keypoints have no graphs yet"
+        if graph_type == "get_template":
+            graph, message = laa_get_template_svg(target_id)
 
     elif distance_value_dataset == "lip_aligned_angle":
         if graph_type == "curvature_plot":

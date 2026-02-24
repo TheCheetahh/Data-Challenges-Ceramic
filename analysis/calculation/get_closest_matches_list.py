@@ -4,6 +4,9 @@ import numpy as np
 
 from analysis.calculation.icp.icp import compute_icp_distance
 from analysis.calculation.laa.laa_calcualtion import laa_calculation
+from analysis.calculation.keypoint.orb import orb_distance
+from analysis.calculation.keypoint.disk import disk_distance
+from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 

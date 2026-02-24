@@ -113,6 +113,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         angle_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "angle_plot")
         analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
         compute_status = compute_curvature_for_all_items(analysis_config)
+        
     else: # this is for keypoint
         curvature_plot_img = None
         curvature_color_img = None
@@ -149,11 +150,12 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
             closest_angle_img, _ = generate_graph(analysis_config, closest_id, "template", "angle_plot")
             closest_id_text = f"{closest_id} (distance={distance:.4f})"
-        else: # keypoint
+        else: # keypoint (orb and disk)
             closest_plot_img = None
             closest_color_img = None
             closest_angle_img = None
-            closest_id_text = None
+            closest_id_text = f"{closest_id} (distance={distance:.4f})"
+            closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
     else: # no closest_id found / there is an error
         closest_svg_output = "<p>No closest match found</p>"
         closest_icp_output = None
