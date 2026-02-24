@@ -148,11 +148,12 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
             closest_angle_img, _ = generate_graph(analysis_config, closest_id, "template", "angle_plot")
             closest_id_text = f"{closest_id} (distance={distance:.4f})"
-        else: # keypoint
+        else: # keypoint (orb and disk)
             closest_plot_img = None
             closest_color_img = None
             closest_angle_img = None
-            closest_id_text = None
+            closest_id_text = f"{closest_id} (distance={distance:.4f})"
+            closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
     else: # no closest_id found / there is an error
         closest_svg_output = "<p>No closest match found</p>"
         closest_icp_output = None
@@ -167,7 +168,13 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     if distance_value_dataset == "ICP":
         closest_icp_output = gr.update(value=closest_icp_img, visible=True)
         closest_svg_output = gr.update(visible=False)
-    else: # or html-svg
+    elif distance_value_dataset == "lip_aligned_angle": # or html-svg
+        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
+        closest_icp_output = gr.update(visible=False)
+    elif distance_value_dataset == "Orb":
+        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
+        closest_icp_output = gr.update(visible=False)
+    else:
         closest_svg_output = gr.update(value=closest_svg_output, visible=True)
         closest_icp_output = gr.update(visible=False)
 

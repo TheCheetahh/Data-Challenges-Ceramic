@@ -13,6 +13,10 @@ Install MongoDB with default settings and with compass.
 
 Running the main will automatically setup the database and collections, but not populate them
 
+On Windows (and maybe linux too?): https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases
+
+Load all dependency packages from requirement_*.txt
+
 ## Manage Files
 
 ### File Upload
