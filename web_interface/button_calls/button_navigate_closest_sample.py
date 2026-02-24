@@ -97,6 +97,10 @@ def click_navigate_closest_sample(distance_type_dataset, distance_value_dataset,
         icp_img , _ = generate_graph(analysis_config, next_id, "template", "overlap_plot")
         icp_update = gr.update(value=icp_img, visible=True)
 
+    elif distance_value_dataset == "Orb" or distance_value_dataset == "DISK":
+        svg_update, _ = generate_graph(analysis_config, next_id, "template", "get_template")
+        svg_update = gr.update(visible=True, value=svg_update)
+        icp_update = gr.update(visible=False)
     else:
         # laa case. Gets the template svg
         svg_update = gr.update(visible=False)

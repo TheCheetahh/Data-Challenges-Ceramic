@@ -167,9 +167,15 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     if distance_value_dataset == "ICP":
         closest_icp_output = gr.update(value=closest_icp_img, visible=True)
         closest_svg_output = gr.update(visible=False)
-    else:
+    elif distance_value_dataset == "lip_aligned_angle":  # or html-svg
         closest_icp_output = gr.update(visible=True, value=closest_svg_output)
         closest_svg_output = gr.update(visible=False)
+    elif distance_value_dataset == "Orb":
+        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
+        closest_icp_output = gr.update(visible=False)
+    else:
+        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
+        closest_icp_output = gr.update(visible=False)
 
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")

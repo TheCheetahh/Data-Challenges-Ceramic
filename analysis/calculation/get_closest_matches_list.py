@@ -6,7 +6,6 @@ from analysis.calculation.icp.icp import compute_icp_distance
 from analysis.calculation.laa.laa_calcualtion import laa_calculation
 from analysis.calculation.keypoint.orb import orb_distance
 from analysis.calculation.keypoint.disk import disk_distance
-from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 
@@ -28,7 +27,7 @@ def get_closest_matches_list(analysis_config):
 
     template_docs = list(db_handler.collection.find(
         {"sample_id": {"$ne": sample_id}},
-        {"sample_id": 1, "curvature_data": 1, "raw_content": 1}
+        {"sample_id": 1, "curvature_data": 1, "raw_content": 1, "cleaned_svg": 1}
     ))
 
     template_ids = [doc["sample_id"] for doc in template_docs]
@@ -79,8 +78,18 @@ def get_closest_matches_list(analysis_config):
                 ))
 
         distances = list(zip(template_ids, dists))
-    elif distance_value_dataset == "Keypoints":
-        distances = [(tid, None) for tid in template_ids]
+
+    # Closest matches with Orb
+    elif distance_value_dataset == "Orb":
+        for template_doc in template_docs:
+            template_id = template_doc["sample_id"]
+            distances.append((template_id, orb_distance(analysis_config, template_doc, template_id)))
+
+    elif distance_value_dataset == "DISK":
+        for template_doc in template_docs:
+            template_id = template_doc["sample_id"]
+            distances.append((template_id, disk_distance(analysis_config, template_doc, template_id)))
+
     # sort
     distances = [x for x in distances if x[1] is not None]
     distances.sort(key=lambda x: x[1])
