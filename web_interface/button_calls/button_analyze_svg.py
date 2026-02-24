@@ -152,7 +152,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
             closest_plot_img = None
             closest_color_img = None
             closest_angle_img = None
-            closest_id_text = None
+            closest_id_text = f"{closest_id} (distance={distance:.4f})"
     else: # no closest_id found / there is an error
         closest_svg_output = "<p>No closest match found</p>"
         closest_icp_output = None

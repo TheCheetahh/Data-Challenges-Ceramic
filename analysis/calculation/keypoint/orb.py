@@ -133,7 +133,7 @@ def match_features(des_sample, des_template, distance_threshold=50):
 # Calculate matching score for the Sample and one given Template SVG
 # -------------------------
 def orb_distance(analysis_config, template_doc, template_id):
-    
+
     # Extracting essentials from the config list and setting sample image for matching
     db_handler = analysis_config.get("db_handler")
     db_handler.use_collection("svg_raw")
@@ -141,19 +141,20 @@ def orb_distance(analysis_config, template_doc, template_id):
     doc = db_handler.collection.find_one({"sample_id": sample_id})
     sample_svg = doc.get("cropped_svg") or doc.get("cleaned_svg")
     sample = load_svg(sample_svg)
-    
+
     # Setting template image
     template_svg = template_doc.get("cleaned_svg")
+    if template_svg is None:
+        print(f"Skipping template {template_id}: no SVG found")
+        return None
     template = load_svg(template_svg)
 
-
-    # Extracting Kepoints and descriptors from the sample and template
+    # Extracting Keypoints and descriptors from the sample and template
     kp_s, des_s = extract_features(sample)
     kp_t, des_t = extract_features(template)
-    
-    # Get score 
+
+    # Get score
     score = match_features(des_s, des_t, distance_threshold=50)
 
-    
     return score
 

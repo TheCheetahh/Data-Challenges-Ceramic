@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import torch
 torch.set_num_threads(1) #Avoid conflicts
-
+import xml.etree.ElementTree as ET
 import kornia
 print(kornia.__version__)
 import kornia.feature as KF
@@ -220,6 +220,9 @@ def disk_distance(analysis_config, template_doc, template_id):
 
     # --- Load images
     sample = load_svg(sample_svg)
+    if template_svg is None:
+        print(f"Skipping template {template_id}: no SVG found")
+        return None
     template = load_svg(template_svg)
 
     # --- Extract features
