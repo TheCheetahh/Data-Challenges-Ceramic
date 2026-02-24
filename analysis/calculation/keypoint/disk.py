@@ -127,7 +127,7 @@ def draw_keypoints(img, kp):
 # -------------------------
 # Lowe Ratio Matching
 # -------------------------
-def match_lowe(des_q, des_t, ratio=0.8):
+def match_lowe(des_q, des_t, ratio=0.95):
     if des_q is None or des_t is None:
         return []
 
@@ -206,43 +206,52 @@ def draw_matches(img1, kp1, img2, kp2, matches):
 
 
 def disk_distance(analysis_config, template_doc, template_id):
-
-    # --- Get sample from DB (same pattern as ORB)
+    
     db_handler = analysis_config.get("db_handler")
-    db_handler.use_collection("svg_raw")
 
-    sample_id = analysis_config.get("sample_id")
-    doc = db_handler.collection.find_one({"sample_id": sample_id})
+    # Load sample SVG and cache keypoints and descriptors
+    if "disk_sample_features" not in analysis_config:
 
-    sample_svg = doc.get("cropped_svg") or doc.get("cleaned_svg")
+        db_handler.use_collection("svg_raw")
+        sample_id = analysis_config.get("sample_id")
+        doc = db_handler.collection.find_one({"sample_id": sample_id})
+
+        sample_svg = doc.get("cropped_svg") or doc.get("cleaned_svg")
+        sample = load_svg(sample_svg)
+
+        kp_s, des_s = extract_features(sample)
+
+        analysis_config["disk_sample_features"] = (kp_s, des_s)
+
+    kp_s, des_s = analysis_config["disk_sample_features"]
+
+
+    # Load template SVG and extract keypoints and descriptors
     template_svg = template_doc.get("cleaned_svg")
 
-    # --- Load images
-    sample = load_svg(sample_svg)
     if template_svg is None:
         print(f"Skipping template {template_id}: no SVG found")
         return None
     template = load_svg(template_svg)
 
-    # --- Extract features
-    kp_s, des_s = extract_features(sample)
     kp_t, des_t = extract_features(template)
 
     if des_s is None or des_t is None:
+        print("Sample des None")
         return 1.0
 
-    # --- Matching
-    matches = match_lowe(des_s, des_t)
+
+    # Matching
+    #matches = match_lowe(des_s, des_t)
+    dists = torch.cdist(des_s, des_t)
+    min_vals, min_idx = torch.min(dists, dim=1)
+    matches = [(i, min_idx[i].item()) for i in range(len(min_vals))]
+    
     inliers = ransac_filter(kp_s, kp_t, matches)
 
-    # --- Normalization (important)
-    normalization = min(len(kp_s) if kp_s is not None else 0,
-                        len(kp_t) if kp_t is not None else 0)
-
-    if normalization == 0:
-        return 1.0
-
-    normalized_score = len(inliers) / normalization
-
+    # Normalization (important)
+    normalized_score = len(inliers) / max(1, len(matches))
+    distance = 1.0 - normalized_score
+    
     # Return distance (like ORB)
-    return float(1.0 - normalized_score)
+    return float(distance)
