@@ -1,0 +1,203 @@
+from pymongo import MongoClient
+from datetime import datetime
+import os
+import pandas as pd
+import chardet
+
+
+class MongoDBHandler:
+    """MongoDB handler class to manage database connections and collections."""
+
+    def __init__(self, db_name, uri="mongodb://localhost:27017/"):
+        """initialise the MongoDB handler object.
+        mongodb://localhost:27017/ is standard path"""
+        self.client = MongoClient(uri)
+        self.db = self.client[db_name]
+        self.collection = None  # will be set when needed
+
+
+    def use_collection(self, collection_name):
+        """set or use collection."""
+        self.collection = self.db[collection_name]
+        return self.collection
+
+
+    def count(self, filter_query=None):
+        """Count documents in the current collection."""
+        if self.collection is None:
+            raise ValueError("No collection selected.")
+        return self.collection.count_documents(filter_query or {})
+
+
+    def insert(self, document):
+        """insert document into current collection."""
+        if self.collection is None:
+            raise ValueError("No collection selected.")
+        return self.collection.insert_one(document)
+
+    def insert_svg_files(self, files, svg_file_type):
+        """Insert SVG files into svg_raw (samples) or svg_template_types (theory templates)."""
+
+        messages = []
+
+        if not files:
+            return "no files to upload"
+
+        # choose collection
+        if svg_file_type == "sample":
+            self.use_collection("svg_raw")
+        else:
+            self.use_collection("svg_template_types")
+
+        duplicate_counter = 0
+
+        for svg_file in files:
+            try:
+                file_path = svg_file.name
+                filename_only = os.path.basename(file_path)
+
+                # read file content
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                # strip the ".svg" once for template mode
+                name_no_ext = (
+                    os.path.splitext(filename_only)[0]
+                )  # removes .svg or any extension
+
+                # ------------------------------------------------------------------
+                # SAMPLE MODE → extract numeric ID as before: recons_10003.svg
+                # ------------------------------------------------------------------
+                if svg_file_type == "sample":
+                    try:
+                        sample_id = filename_only.split("_")[1].split(".")[0]
+                    except Exception:
+                        print(f"Invalid sample filename format (expected e.g. recons_10003.svg): {filename_only} but lets try it anyway, its in the database now")
+                        sample_id = filename_only
+
+                    Typ_value = ""  # samples do not have a type
+
+                # ------------------------------------------------------------------
+                # THEORY TEMPLATE MODE → sample_id = filename WITHOUT extension
+                # Typ = filename WITHOUT extension
+                # ------------------------------------------------------------------
+                else:
+                    sample_id = name_no_ext
+                    Typ_value = name_no_ext
+
+                # duplicate check
+                if self.collection.find_one({"filename": filename_only}):
+                    duplicate_counter += 1
+                    continue
+
+                # build document
+                doc = {
+                    "sample_id": sample_id,
+                    "filename": filename_only,
+                    "raw_content": content,
+                    "uploaded_at": datetime.utcnow(),
+                    "Typ": Typ_value
+                }
+
+                self.insert(doc)
+                messages.append(f"Uploaded '{filename_only}' successfully.")
+
+            except Exception as e:
+                messages.append(f"Error '{filename_only}': {e}")
+
+        # footer summary
+        messages.append(f"{duplicate_counter} duplicate files were not added to collection")
+        messages.append(f"Total files in collection: {self.count()}")
+
+        return "\n".join(messages)
+
+
+    def find(self, filter_query=None):
+        """find all documents matching the provided filter."""
+        if self.collection is None:
+            raise ValueError("No collection selected.")
+        return self.collection.find(filter_query or {})
+
+
+    def close(self):
+        """close the connection to the database."""
+        self.client.close()
+
+
+    def get_cleaned_svg(self, sample_id):
+        """gets a cleaned SVG from the database."""
+
+        try:
+            sample_id = sample_id
+        except ValueError:
+            return None, "❌ sample_id must be a number."
+
+        doc = self.collection.find_one({"sample_id": sample_id})
+        if not doc:
+            return None, f"❌ No entry found for sample_id {sample_id}."
+
+        cleaned_svg = doc.get("cleaned_svg")
+        if not cleaned_svg:
+            return None, f"⚠️ No cleaned SVG stored for sample_id {sample_id}."
+
+        return cleaned_svg, None
+
+
+    def list_svg_ids(self):
+        """Return a sorted list of sample_ids for all SVGs in 'svg_raw'."""
+        self.use_collection("svg_raw")
+        docs = self.collection.find({}, {"sample_id": 1})
+        sample_ids = [doc["sample_id"] for doc in docs if "sample_id" in doc]
+        return sorted(sample_ids)
+
+
+    def get_sample_type(self, sample_id):
+        """get sample type from database"""
+
+        doc = self.collection.find_one({"sample_id": sample_id}, {"Typ": 1})
+        if not doc:
+            return None
+        return doc.get("Typ", None)
+
+    def update_type(self, sample_id, new_type):
+        """Update the 'type' field of a document"""
+        try:
+            sample_id = sample_id
+        except (ValueError, TypeError):
+            return False, "❌ sample_id must be an integer."
+
+        if not isinstance(new_type, str):
+            return False, "❌ new_type must be a string."
+
+        result = self.collection.update_one(
+            {"sample_id": sample_id},
+            {"$set": {"Typ": new_type}}
+        )
+
+        if result.matched_count == 0:
+            return False, f"❌ No document found with sample_id {sample_id}"
+
+        return True, f"✅ Updated type for sample_id {sample_id} to '{new_type}'"
+
+    def save_closest_matches(self, sample_id, matches):
+        """
+        Save [{'id': X, 'distance': Y}, ...] for sample_id.
+        """
+        self.use_collection("svg_raw")
+        self.collection.update_one(
+            {"sample_id": sample_id},
+            {"$set": {"closest_matches": matches}},
+            upsert=True
+        )
+
+    def get_closest_matches(self, sample_id):
+        self.use_collection("svg_raw")
+        doc = self.collection.find_one(
+            {"sample_id": sample_id},
+            {"closest_matches": 1}
+        )
+        return doc.get("closest_matches", []) if doc else []
+
+    def find_all(self):
+        """Return all documents in the current collection as a list."""
+        return list(self.find())

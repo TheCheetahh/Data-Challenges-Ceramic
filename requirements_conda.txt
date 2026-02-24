@@ -1,0 +1,40 @@
+name: DC_Test
+channels:
+  - conda-forge
+dependencies:
+  # ---- Core ----
+  - python=3.12
+  - pip
+
+  # ---- Compiled / scientific stack (Conda only) ----
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - pillow
+  - opencv
+  - cairo
+  - cairosvg
+  - pymongo
+
+  # ---- SVG tools ----
+  - svgpathtools
+  - svgwrite
+
+  # ---- Utilities ----
+  - tqdm
+  - pyyaml
+
+  # ---- Web stack (pip only) ----
+  - pip:
+      - fastapi
+      - uvicorn
+      - starlette
+      - gradio
+      - gradio_client
+      - httpx
+      - huggingface_hub
+      - typer
+      - rich
+      - aiofiles
+      - python-multipart
