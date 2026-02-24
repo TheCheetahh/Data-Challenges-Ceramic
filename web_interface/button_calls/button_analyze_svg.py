@@ -7,15 +7,16 @@ import gradio as gr
 
 from web_interface.graph_generation.generate_graph import generate_graph
 from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
+import os
 
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
-                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox):
+                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox, batch_mode=False):
     """
     called by button
     calculates the graph data, stores it in db and displays it
     """
-
+    print(f"[PID {os.getpid()}] analyzing sample {sample_id}")
     # get a database handler
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
@@ -31,7 +32,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "smooth_window": smooth_window,
         "n_samples": n_samples,
         "duplicate_synonym_checkbox": duplicate_synonym_checkbox,
-        "top_k" : None
+        "top_k" : None,
+        "batch_mode": batch_mode
     }
 
     # Get the document
@@ -142,7 +144,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
                 closest_icp_img, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
             else: # laa
                 # get template SVG (specifically for laa)
-                closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
+                closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
             # Load curvature data of closest match and generate plots
             closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")
             closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
@@ -162,21 +164,12 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_angle_img = None
         closest_id_text = "No closest match found"
 
-
-
-    # is output image
     if distance_value_dataset == "ICP":
         closest_icp_output = gr.update(value=closest_icp_img, visible=True)
         closest_svg_output = gr.update(visible=False)
-    elif distance_value_dataset == "lip_aligned_angle": # or html-svg
-        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
-        closest_icp_output = gr.update(visible=False)
-    elif distance_value_dataset == "Orb":
-        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
-        closest_icp_output = gr.update(visible=False)
     else:
-        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
-        closest_icp_output = gr.update(visible=False)
+        closest_icp_output = gr.update(visible=True, value=closest_svg_output)
+        closest_svg_output = gr.update(visible=False)
 
     # Get the type of the sample from the database
     db_handler.use_collection("svg_raw")

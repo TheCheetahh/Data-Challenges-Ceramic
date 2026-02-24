@@ -241,7 +241,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     )
 
                     pinned_icp_output = gr.Image(
-                        label="ICP Overlap",
+                        label="Overlap",
                         visible=False
                     )
                 with gr.Column(scale=1, min_width=400):
@@ -251,7 +251,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     )
 
                     closest_icp_output = gr.Image(
-                        label="ICP Overlap", interactive=False,
+                        label="Overlap", interactive=False,
                         visible=True
                     )
 
