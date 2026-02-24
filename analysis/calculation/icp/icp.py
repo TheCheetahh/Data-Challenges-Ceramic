@@ -13,8 +13,8 @@ _ORDER_CACHE = {}
 _SIGNED_WIDTH_CACHE = {}
 
 scaling_factor = 2.0
-angle_weight = 0.5
-max_degree = 15.0
+angle_weight = 0.3
+max_degree = 2.0
 
 def _clear_icp_caches():
     _ORDER_CACHE.clear()

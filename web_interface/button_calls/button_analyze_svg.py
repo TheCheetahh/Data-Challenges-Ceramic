@@ -7,15 +7,16 @@ import gradio as gr
 
 from web_interface.graph_generation.generate_graph import generate_graph
 from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
+import os
 
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
-                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox):
+                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox, batch_mode=False):
     """
     called by button
     calculates the graph data, stores it in db and displays it
     """
-
+    print(f"[PID {os.getpid()}] analyzing sample {sample_id}")
     # get a database handler
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
@@ -31,7 +32,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "smooth_window": smooth_window,
         "n_samples": n_samples,
         "duplicate_synonym_checkbox": duplicate_synonym_checkbox,
-        "top_k" : None
+        "top_k" : None,
+        "batch_mode": batch_mode
     }
 
     # Get the document
