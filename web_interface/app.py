@@ -5,11 +5,7 @@ from web_interface.button_calls.button_add_rule import click_add_rule, load_rule
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg, update_analyze_button_color
 from web_interface.button_calls.button_csv_download import click_csv_download
 from web_interface.button_calls.button_csv_upload import click_csv_upload
-from web_interface.button_calls.button_navigate_closest_sample import (
-    click_navigate_closest_sample,
-    update_closest_match_dropdown,
-    click_select_closest_sample,
-)
+from web_interface.button_calls.button_navigate_closest_sample import click_navigate_closest_sample, update_closest_match_dropdown, click_select_closest_sample
 from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_pin import click_pin_button
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
@@ -135,6 +131,15 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 interactive=True
             )
 
+            seam_pos = gr.Slider(
+                minimum=0.0,
+                maximum=100.0,
+                value=50.0,
+                step=0.5,
+                label="Start/End Position (50 = lowest point)",
+                interactive=True
+            )
+
             save_cropped_svg_button = gr.Button("Save cropped svg path")
             save_status = gr.Textbox(label="Save Status", interactive=False)
 
@@ -218,17 +223,17 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Closest Match")
 
-                    # Jump-to-match dropdown (replaces the old "Closest Template ID" textbox)
+                    # Replaces the old "Closest Template ID" textbox
                     closest_match_dropdown = gr.Dropdown(
-                        label="Closest Template ID",
                         choices=[],
                         value=None,
+                        label="Closest Template ID",
                         interactive=True,
                     )
 
-                    # Keep this hidden textbox for backward-compatible outputs/inputs in existing callbacks
+                    # Keep hidden output to stay compatible with existing analyze/batch callbacks
                     closest_sample_id_output = gr.Textbox(
-                        label="Closest Template ID",
+                        label="Closest Template ID (hidden)",
                         interactive=False,
                         visible=False,
                     )
@@ -348,7 +353,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
     demo.load(
         fn=change_crop_svg_dropdown,
         inputs=[crop_svg_dropdown],
-        outputs=[full_svg_display, cropped_svg_display, crop_start, crop_end]
+        outputs=[full_svg_display, cropped_svg_display, crop_start, crop_end, seam_pos]
     )
 
     # svg upload
@@ -432,7 +437,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 closest_curvature_plot_output,
                 closest_curvature_color_output,
                 closest_angle_plot_output,
-                closest_sample_id_output,
+                closest_match_dropdown,
                 closest_template_synonymes,
                 current_index_state],
         outputs=[
@@ -503,39 +508,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[closest_match_dropdown],
     )
 
-    # Dropdown change: jump directly to a selected closest match
-    closest_match_dropdown.change(
-        fn=click_select_closest_sample,
-        inputs=[
-            distance_type_dataset,
-            distance_value_dataset,
-            distance_calculation,
-            current_sample_state,
-            closest_list_state,
-            current_index_state,
-            smooth_method_dropdown,
-            smooth_factor,
-            smooth_window_slider,
-            samples,
-            closest_match_dropdown,
-        ],
-        outputs=[
-            closest_svg_output,
-            closest_icp_output,
-            closest_curvature_plot_output,
-            closest_curvature_color_output,
-            closest_angle_plot_output,
-            closest_template_synonymes,
-            current_index_state,
-            closest_sample_id_output,
-            index_display,
-        ],
-    ).then(
-        fn=update_closest_match_dropdown,
-        inputs=[closest_list_state, current_index_state],
-        outputs=[closest_match_dropdown],
-    )
-
     batch_analyse_button.click(
         fn=click_batch_analyze,
         inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, svg_dropdown,
@@ -571,7 +543,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 closest_curvature_plot_output,
                 closest_curvature_color_output,
                 closest_angle_plot_output,
-                closest_sample_id_output,
+                closest_match_dropdown,
                 closest_template_synonymes,
                 current_index_state],
         outputs=[
@@ -590,29 +562,59 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[analyze_button]
     )
 
+    # Jump-to-match dropdown
+    closest_match_dropdown.change(
+        fn=click_select_closest_sample,
+        inputs=[distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_state, closest_list_state, current_index_state,
+                smooth_method_dropdown, smooth_factor, smooth_window_slider, samples, closest_match_dropdown],
+        outputs=[
+            closest_svg_output,
+            closest_icp_output,
+
+            closest_curvature_plot_output,
+            closest_curvature_color_output,
+            closest_angle_plot_output,
+
+            closest_template_synonymes,
+            current_index_state,
+            closest_sample_id_output,
+            index_display,
+        ],
+    ).then(
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
+    )
+
     # Dropdown change - loads from database and updates sliders
     crop_svg_dropdown.change(
         fn=change_crop_svg_dropdown,
         inputs=[crop_svg_dropdown],
-        outputs=[full_svg_display, cropped_svg_display, crop_start, crop_end]
+        outputs=[full_svg_display, cropped_svg_display, crop_start, crop_end, seam_pos]
     )
 
     # Slider change
     crop_start.change(
         fn=update_crop_preview,
-        inputs=[crop_svg_dropdown, crop_start, crop_end],
+        inputs=[crop_svg_dropdown, crop_start, crop_end, seam_pos],
         outputs=[full_svg_display, cropped_svg_display]
     )
 
     crop_end.change(
         fn=update_crop_preview,
-        inputs=[crop_svg_dropdown, crop_start, crop_end],
+        inputs=[crop_svg_dropdown, crop_start, crop_end, seam_pos],
+        outputs=[full_svg_display, cropped_svg_display]
+    )
+
+    seam_pos.change(
+        fn=update_crop_preview,
+        inputs=[crop_svg_dropdown, crop_start, crop_end, seam_pos],
         outputs=[full_svg_display, cropped_svg_display]
     )
 
     save_cropped_svg_button.click(
         fn=click_save_cropped_svg,
-        inputs=[crop_svg_dropdown, crop_start, crop_end],
+        inputs=[crop_svg_dropdown, crop_start, crop_end, seam_pos],
         outputs=[save_status]
     )
 
@@ -645,7 +647,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 closest_curvature_plot_output,
                 closest_curvature_color_output,
                 closest_angle_plot_output,
-                closest_sample_id_output,
+                closest_match_dropdown,
                 closest_template_synonymes,
                 current_index_state],
         outputs=[
