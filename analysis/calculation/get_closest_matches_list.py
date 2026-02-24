@@ -4,7 +4,9 @@ import numpy as np
 
 from analysis.calculation.icp.icp import compute_icp_distance
 from analysis.calculation.laa.laa_calcualtion import laa_calculation
-from concurrent.futures import ProcessPoolExecutor
+from analysis.calculation.keypoint.orb import orb_distance
+from analysis.calculation.keypoint.disk import disk_distance
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 
 def get_closest_matches_list(analysis_config):
@@ -21,56 +23,72 @@ def get_closest_matches_list(analysis_config):
     distance_value_dataset = analysis_config.get("distance_value_dataset")
     db_handler = analysis_config.get("db_handler")
     db_handler.use_collection("svg_template_types")
+    batch_mode = analysis_config.get("batch_mode", False)
+
+    template_docs = list(db_handler.collection.find(
+        {"sample_id": {"$ne": sample_id}},
+        {"sample_id": 1, "curvature_data": 1, "raw_content": 1, "cleaned_svg": 1}
+    ))
+
+    template_ids = [doc["sample_id"] for doc in template_docs]
+    distances = []
 
     # compute distances
     # laa is here because this is parallel
     distances = []
     if distance_value_dataset == "lip_aligned_angle":
 
-        template_docs = list(db_handler.collection.find(
-            {"sample_id": {"$ne": sample_id}},
-            {"sample_id": 1, "curvature_data": 1,"raw_content": 1}
-        ))
+        # Clear old overlap data before recalculating
+        db_handler.collection.update_one(
+            {"sample_id": sample_id},
+            {"$unset": {"laa_overlap_data": ""}}
+        )
 
         db_handler = analysis_config.pop("db_handler")
 
-        with ProcessPoolExecutor() as executor:
-            distances = list(executor.map(
-                compute_distance,
-                template_docs,
-                [analysis_config] * len(template_docs)
-            ))
+        if batch_mode:
+            distances = [
+                compute_distance(doc, analysis_config)
+                for doc in template_docs
+            ]
+        else:
+            with ProcessPoolExecutor() as executor:
+                distances = list(executor.map(
+                    compute_distance,
+                    template_docs,
+                    [analysis_config] * len(template_docs)
+                ))
 
         analysis_config["db_handler"] = db_handler
 
-    else:
-        # non parallel
-        # setup distances list
-        distances = []
-        # iterate all templates, fill distances[] with results
-        for template_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
-                                                       {"sample_id": 1, "curvature_data": 1, "raw_content": 1}):
+    elif distance_value_dataset == "ICP":
+        if batch_mode:
+            dists = [
+                compute_icp_distance(db_handler, sample_id, tid, analysis_config)
+                for tid in template_ids
+            ]
+        else:
+            with ThreadPoolExecutor() as executor:
+                dists = list(executor.map(
+                    compute_icp_distance,
+                    [db_handler] * len(template_ids),
+                    [sample_id] * len(template_ids),
+                    template_ids,
+                    [analysis_config] * len(template_ids),
+                ))
+
+        distances = list(zip(template_ids, dists))
+
+    # Closest matches with Orb
+    elif distance_value_dataset == "Orb":
+        for template_doc in template_docs:
             template_id = template_doc["sample_id"]
+            distances.append((template_id, orb_distance(analysis_config, template_doc, template_id)))
 
-            # dataset selection
-            # Marco code placeholder
-            if distance_value_dataset == "Keypoints":
-                # instead of none it should call the function that returns the distance
-                distances.append((template_id, None))
-
-            # cannot be called because this is the old sequential one, but maybe we will need it one day
-            elif distance_value_dataset == "lip_aligned_angle":
-                distances.append((template_id, laa_calculation(analysis_config, template_doc, template_id)))
-
-            elif distance_value_dataset == "ICP":
-                dist = compute_icp_distance(
-                    analysis_config["db_handler"],
-                    sample_id,
-                    template_id,
-                    analysis_config
-                )
-                distances.append((template_id, dist))
-                continue
+    elif distance_value_dataset == "DISK":
+        for template_doc in template_docs:
+            template_id = template_doc["sample_id"]
+            distances.append((template_id, disk_distance(analysis_config, template_doc, template_id)))
 
     # sort
     distances = [x for x in distances if x[1] is not None]

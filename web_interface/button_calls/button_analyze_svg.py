@@ -7,15 +7,16 @@ import gradio as gr
 
 from web_interface.graph_generation.generate_graph import generate_graph
 from web_interface.other_gradio_components.checkbox_synonym import filter_synonym_matches
+import os
 
 
 def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
-                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox):
+                      smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox, batch_mode=False):
     """
     called by button
     calculates the graph data, stores it in db and displays it
     """
-
+    # print(f"[PID {os.getpid()}] analyzing sample {sample_id}")
     # get a database handler
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")
@@ -31,7 +32,8 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         "smooth_window": smooth_window,
         "n_samples": n_samples,
         "duplicate_synonym_checkbox": duplicate_synonym_checkbox,
-        "top_k" : None
+        "top_k" : None,
+        "batch_mode": batch_mode
     }
 
     # Get the document
@@ -111,6 +113,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         angle_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "angle_plot")
         analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
         compute_status = compute_curvature_for_all_items(analysis_config)
+        
     else: # this is for keypoint
         curvature_plot_img = None
         curvature_color_img = None
@@ -141,17 +144,18 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
                 closest_icp_img, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
             else: # laa
                 # get template SVG (specifically for laa)
-                closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
+                closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "overlap_plot")
             # Load curvature data of closest match and generate plots
             closest_plot_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_plot")
             closest_color_img, _ = generate_graph(analysis_config, closest_id, "template", "curvature_color")
             closest_angle_img, _ = generate_graph(analysis_config, closest_id, "template", "angle_plot")
             closest_id_text = f"{closest_id} (distance={distance:.4f})"
-        else: # keypoint
+        else: # keypoint (orb and disk)
             closest_plot_img = None
             closest_color_img = None
             closest_angle_img = None
-            closest_id_text = None
+            closest_id_text = f"{closest_id} (distance={distance:.4f})"
+            closest_svg_output, _ = generate_graph(analysis_config, closest_id, "template", "get_template")
     else: # no closest_id found / there is an error
         closest_svg_output = "<p>No closest match found</p>"
         closest_icp_output = None
@@ -160,13 +164,16 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         closest_angle_img = None
         closest_id_text = "No closest match found"
 
-
-
-    # is output image
     if distance_value_dataset == "ICP":
         closest_icp_output = gr.update(value=closest_icp_img, visible=True)
         closest_svg_output = gr.update(visible=False)
-    else: # or html-svg
+    elif distance_value_dataset == "lip_aligned_angle":  # or html-svg
+        closest_icp_output = gr.update(visible=True, value=closest_svg_output)
+        closest_svg_output = gr.update(visible=False)
+    elif distance_value_dataset == "Orb":
+        closest_svg_output = gr.update(value=closest_svg_output, visible=True)
+        closest_icp_output = gr.update(visible=False)
+    else:
         closest_svg_output = gr.update(value=closest_svg_output, visible=True)
         closest_icp_output = gr.update(visible=False)
 

@@ -1,7 +1,7 @@
 from analysis.calculation.icp.icp import generate_icp_overlap_image
 from web_interface.graph_generation.laa.laa_graphs import laa_generate_curvature_lineplot, \
     laa_generate_curvature_color_map, \
-    laa_generate_direction_lineplot, laa_get_template_svg
+    laa_generate_direction_lineplot, laa_get_template_svg, visualize_laa_overlap
 
 
 def generate_graph(analysis_config, target_id, target_type, graph_type):
@@ -18,9 +18,17 @@ def generate_graph(analysis_config, target_id, target_type, graph_type):
     graph = None
     message = None
 
-    if distance_value_dataset == "Keypoints":
+    if distance_value_dataset == "Orb":
         graph = None
         message = "Keypoints have no graphs yet"
+        if graph_type == "get_template":
+            graph, message = laa_get_template_svg(target_id)
+
+    elif distance_value_dataset == "DISK":
+        graph = None
+        message = "Keypoints have no graphs yet"
+        if graph_type == "get_template":
+            graph, message = laa_get_template_svg(target_id)
 
     elif distance_value_dataset == "lip_aligned_angle":
         if graph_type == "curvature_plot":
@@ -31,6 +39,8 @@ def generate_graph(analysis_config, target_id, target_type, graph_type):
             graph, message = laa_generate_direction_lineplot(target_id, target_type)
         elif graph_type == "get_template":
             graph, message = laa_get_template_svg(target_id)
+        elif graph_type == "overlap_plot":
+            graph, message = visualize_laa_overlap(analysis_config, target_id)
 
     elif distance_value_dataset == "ICP":
         if graph_type == "curvature_plot":

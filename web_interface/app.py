@@ -168,7 +168,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     distance_type_dataset = gr.State("theory types")
                     """distance_type_dataset = gr.Dropdown(choices=["theory types"], value="theory types",
                                                         label="Distanzberechnung Datensatz")"""
-                    distance_value_dataset = gr.Dropdown(choices=["ICP", "lip_aligned_angle", "Keypoints"],
+                    distance_value_dataset = gr.Dropdown(choices=["ICP", "lip_aligned_angle", "Orb", "DISK"],
                                                          label="Calculation Algorithm")
                     distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
                                                                 "Correlation Distance",
@@ -268,7 +268,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     )
 
                     pinned_icp_output = gr.Image(
-                        label="ICP Overlap",
+                        label="Overlap",
                         visible=False
                     )
                 with gr.Column(scale=1, min_width=400):
@@ -278,7 +278,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     )
 
                     closest_icp_output = gr.Image(
-                        label="ICP Overlap", interactive=False,
+                        label="Overlap", interactive=False,
                         visible=True
                     )
 
