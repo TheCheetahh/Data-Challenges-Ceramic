@@ -1,6 +1,6 @@
 from database_handler import MongoDBHandler
 from web_interface.button_calls.button_analyze_svg import click_analyze_svg
-
+from concurrent.futures import ProcessPoolExecutor
 
 def click_batch_analyze(distance_type_dataset, distance_value_dataset, distance_calculation, sample_id, smooth_method,
                         smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox):
@@ -25,10 +25,23 @@ def click_batch_analyze(distance_type_dataset, distance_value_dataset, distance_
     db_handler.use_collection("svg_raw")
 
     # iterate over all samples
+    
     id_list = db_handler.list_svg_ids()
-    for current_sample_id in id_list:
-        click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation, current_sample_id,
-                          smooth_method, smooth_factor, smooth_window, n_samples, duplicate_synonym_checkbox)
+
+    with ProcessPoolExecutor() as executor:
+        list(executor.map(
+            click_analyze_svg,
+            [distance_type_dataset] * len(id_list),
+            [distance_value_dataset] * len(id_list),
+            [distance_calculation] * len(id_list),
+            id_list,
+            [smooth_method] * len(id_list),
+            [smooth_factor] * len(id_list),
+            [smooth_window] * len(id_list),
+            [n_samples] * len(id_list),
+            [duplicate_synonym_checkbox] * len(id_list),
+            [True] * len(id_list),   # telling that it's batch mode
+        ))
 
     # return values of currently selected sample in the dropdown. It is displayed after the calculation is done
     return click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_calculation,

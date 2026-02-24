@@ -21,6 +21,7 @@ def get_closest_matches_list(analysis_config):
     distance_value_dataset = analysis_config.get("distance_value_dataset")
     db_handler = analysis_config.get("db_handler")
     db_handler.use_collection("svg_template_types")
+    batch_mode = analysis_config.get("batch_mode", False)
 
     template_docs = list(db_handler.collection.find(
         {"sample_id": {"$ne": sample_id}},
@@ -43,24 +44,36 @@ def get_closest_matches_list(analysis_config):
 
         db_handler = analysis_config.pop("db_handler")
 
-        with ProcessPoolExecutor() as executor:
-            distances = list(executor.map(
-                compute_distance,
-                template_docs,
-                [analysis_config] * len(template_docs)
-            ))
+        if batch_mode:
+            distances = [
+                compute_distance(doc, analysis_config)
+                for doc in template_docs
+            ]
+        else:
+            with ProcessPoolExecutor() as executor:
+                distances = list(executor.map(
+                    compute_distance,
+                    template_docs,
+                    [analysis_config] * len(template_docs)
+                ))
 
         analysis_config["db_handler"] = db_handler
 
     elif distance_value_dataset == "ICP":
-        with ThreadPoolExecutor() as executor:
-            dists = list(executor.map(
-                compute_icp_distance,
-                [db_handler] * len(template_ids),
-                [sample_id] * len(template_ids),
-                template_ids,
-                [analysis_config] * len(template_ids),
-            ))
+        if batch_mode:
+            dists = [
+                compute_icp_distance(db_handler, sample_id, tid, analysis_config)
+                for tid in template_ids
+            ]
+        else:
+            with ThreadPoolExecutor() as executor:
+                dists = list(executor.map(
+                    compute_icp_distance,
+                    [db_handler] * len(template_ids),
+                    [sample_id] * len(template_ids),
+                    template_ids,
+                    [analysis_config] * len(template_ids),
+                ))
 
         distances = list(zip(template_ids, dists))
     elif distance_value_dataset == "Keypoints":
