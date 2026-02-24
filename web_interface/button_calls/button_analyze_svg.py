@@ -111,6 +111,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
         angle_plot_img, _ = generate_graph(analysis_config, sample_id, "sample", "angle_plot")
         analysis_config["distance_type_dataset"] = "theory types"  # THIS MUST HAPPEN AFTER IT WAS CHANGED A FEW LINES ABOVE
         compute_status = compute_curvature_for_all_items(analysis_config)
+        
     else: # this is for keypoint
         curvature_plot_img = None
         curvature_color_img = None

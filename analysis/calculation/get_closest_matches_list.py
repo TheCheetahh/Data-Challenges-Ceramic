@@ -4,6 +4,8 @@ import numpy as np
 
 from analysis.calculation.icp.icp import ensure_icp_geometry, run_icp, icp_score
 from analysis.calculation.laa.laa_calcualtion import laa_calculation
+from analysis.calculation.keypoint.orb import orb_distance
+from analysis.calculation.keypoint.disk import disk_distance
 from concurrent.futures import ProcessPoolExecutor
 
 
@@ -49,14 +51,17 @@ def get_closest_matches_list(analysis_config):
         distances = []
         # iterate all templates, fill distances[] with results
         for template_doc in db_handler.collection.find({"sample_id": {"$ne": sample_id}},
-                                                       {"sample_id": 1, "curvature_data": 1}):
+                                                       {"sample_id": 1, "curvature_data": 1, "cleaned_svg": 1}):
             template_id = template_doc["sample_id"]
 
             # dataset selection
-            # Marco code placeholder
-            if distance_value_dataset == "Keypoints":
-                # instead of none it should call the function that returns the distance
-                distances.append((template_id, None))
+            # Closest matches with Orb
+            if distance_value_dataset == "Orb":
+                distances.append((template_id, orb_distance(analysis_config, template_doc, template_id)))
+                
+            # Closest matches with DISK
+            elif distance_value_dataset == "DISK":
+                distances.append((template_id, orb_distance(analysis_config, template_doc, template_id)))
 
             # cannot be called because this is the old sequential one, but maybe we will need it one day
             elif distance_value_dataset == "lip_aligned_angle":
