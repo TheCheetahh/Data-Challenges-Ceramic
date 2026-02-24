@@ -102,14 +102,12 @@ def match_features(des_sample, des_template, distance_threshold=50):
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
     if des_sample is None or des_template is None:
-        print("descriptor None")
         return 1.0
 
     # Calculating hamming distance between descriptors
     matches = bf.match(des_sample, des_template)
 
     if not matches:
-        print("not matches")
         return 1.0
 
     # Keeping only matches closer than the threshold (might need some finetuning still)
@@ -122,7 +120,7 @@ def match_features(des_sample, des_template, distance_threshold=50):
         print("normalization_factor")
         return 1.0
 
-    # (1.0 = perfect match, 0.0 = no match at all) get switched at return
+    # (1.0 = perfect match, 0.0 = no match at all) gets switched at return
     normalized_score = len(good) / normalization_factor
 
     # Return 1 - normalized score because it is sorted by lowest distance.
