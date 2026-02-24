@@ -16,7 +16,7 @@ def click_analyze_svg(distance_type_dataset, distance_value_dataset, distance_ca
     called by button
     calculates the graph data, stores it in db and displays it
     """
-    print(f"[PID {os.getpid()}] analyzing sample {sample_id}")
+    # print(f"[PID {os.getpid()}] analyzing sample {sample_id}")
     # get a database handler
     db_handler = MongoDBHandler("svg_data")
     db_handler.use_collection("svg_raw")

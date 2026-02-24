@@ -8,7 +8,6 @@ import torch
 torch.set_num_threads(1) #Avoid conflicts
 import xml.etree.ElementTree as ET
 import kornia
-print(kornia.__version__)
 import kornia.feature as KF
 import cairosvg
 import matplotlib.pyplot as plt
