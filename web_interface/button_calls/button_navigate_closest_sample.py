@@ -210,10 +210,15 @@ def click_select_closest_sample(
         svg_update = gr.update(visible=False)
         icp_img, _ = generate_graph(analysis_config, selected_id, "template", "overlap_plot")
         icp_update = gr.update(value=icp_img, visible=True)
-    else:
-        svg_html, _ = generate_graph(analysis_config, selected_id, "template", "get_template")
-        svg_update = gr.update(value=svg_html, visible=True)
+    elif distance_value_dataset == "Orb" or distance_value_dataset == "DISK":
+        svg_update, _ = generate_graph(analysis_config, selected_id, "template", "get_template")
+        svg_update = gr.update(visible=True, value=svg_update)
         icp_update = gr.update(visible=False)
+    else:
+        # laa case. Gets the template svg
+        svg_update = gr.update(visible=False)
+        icp_img, _ = generate_graph(analysis_config, selected_id, "template", "overlap_plot")
+        icp_update = gr.update(value=icp_img, visible=True)
 
     db_handler.use_collection("svg_synonym_rules")
     rule = db_handler.collection.find_one({"members": selected_id})
