@@ -7,8 +7,8 @@ from web_interface.button_calls.button_csv_download import click_csv_download
 from web_interface.button_calls.button_csv_upload import click_csv_upload
 from web_interface.button_calls.button_navigate_closest_sample import (
     click_navigate_closest_sample,
-    click_select_closest_sample,
     update_closest_match_dropdown,
+    click_select_closest_sample,
 )
 from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_pin import click_pin_button
@@ -218,8 +218,20 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 with gr.Column(scale=1, min_width=400):
                     gr.Markdown("## Closest Match")
 
-                    # displays type and distance
-                    closest_sample_id_output = gr.Textbox(label="Closest Template ID", interactive=False)
+                    # Jump-to-match dropdown (replaces the old "Closest Template ID" textbox)
+                    closest_match_dropdown = gr.Dropdown(
+                        label="Closest Template ID",
+                        choices=[],
+                        value=None,
+                        interactive=True,
+                    )
+
+                    # Keep this hidden textbox for backward-compatible outputs/inputs in existing callbacks
+                    closest_sample_id_output = gr.Textbox(
+                        label="Closest Template ID",
+                        interactive=False,
+                        visible=False,
+                    )
 
                     # change this to synonym group
                     closest_template_synonymes = gr.Textbox(
@@ -231,14 +243,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                         previous_sample_button = gr.Button("←")
                         index_display = gr.Markdown("-/-", elem_id="centered_md")
                         next_sample_button = gr.Button("→")
-
-                    # Jump directly to any match in the current closest_list_state
-                    closest_match_dropdown = gr.Dropdown(
-                        choices=[],
-                        value=None,
-                        label="Jump to match",
-                        interactive=True,
-                    )
 
             with gr.Row():
                 # Left column: inspected svg
@@ -417,34 +421,34 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  last_analysis_state,
                  ]
     ).then(
-    fn=click_pin_button,
-    inputs=[distance_value_dataset,
-            closest_svg_output,
-            closest_icp_output,
-            closest_curvature_plot_output,
-            closest_curvature_color_output,
-            closest_angle_plot_output,
-            closest_sample_id_output,
-            closest_template_synonymes,
-            current_index_state],
-    outputs=[
-        pinned_svg_output,
-        pinned_icp_output,
-        pinned_curvature_plot_output,
-        pinned_curvature_color_output,
-        pinned_angle_plot_output,
-        pinned_sample_id_output,
-        pinned_synonyme_output,
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
+    ).then(
+        fn=click_pin_button,
+        inputs=[distance_value_dataset,
+                closest_svg_output,
+                closest_icp_output,
+                closest_curvature_plot_output,
+                closest_curvature_color_output,
+                closest_angle_plot_output,
+                closest_sample_id_output,
+                closest_template_synonymes,
+                current_index_state],
+        outputs=[
+            pinned_svg_output,
+            pinned_icp_output,
+            pinned_curvature_plot_output,
+            pinned_curvature_color_output,
+            pinned_angle_plot_output,
+            pinned_sample_id_output,
+            pinned_synonyme_output,
             pinned_index_display
-    ]
+        ]
     ).then(
         fn=update_analyze_button_color,
         inputs=analysis_button_inputs,
         outputs=[analyze_button]
-    ).then(
-        fn=update_closest_match_dropdown,
-        inputs=[closest_list_state, current_index_state],
-        outputs=[closest_match_dropdown],
     )
 
     save_type_button.click(
@@ -499,7 +503,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[closest_match_dropdown],
     )
 
-    # Dropdown jump (select any match)
+    # Dropdown change: jump directly to a selected closest match
     closest_match_dropdown.change(
         fn=click_select_closest_sample,
         inputs=[
@@ -518,11 +522,9 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         outputs=[
             closest_svg_output,
             closest_icp_output,
-
             closest_curvature_plot_output,
             closest_curvature_color_output,
             closest_angle_plot_output,
-
             closest_template_synonymes,
             current_index_state,
             closest_sample_id_output,
@@ -558,34 +560,34 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                  last_analysis_state
                  ]
     ).then(
-    fn=click_pin_button,
-    inputs=[distance_value_dataset,
-            closest_svg_output,
-            closest_icp_output,
-            closest_curvature_plot_output,
-            closest_curvature_color_output,
-            closest_angle_plot_output,
-            closest_sample_id_output,
-            closest_template_synonymes,
-            current_index_state],
-    outputs=[
-        pinned_svg_output,
-        pinned_icp_output,
-        pinned_curvature_plot_output,
-        pinned_curvature_color_output,
-        pinned_angle_plot_output,
-        pinned_sample_id_output,
-        pinned_synonyme_output,
+        fn=update_closest_match_dropdown,
+        inputs=[closest_list_state, current_index_state],
+        outputs=[closest_match_dropdown],
+    ).then(
+        fn=click_pin_button,
+        inputs=[distance_value_dataset,
+                closest_svg_output,
+                closest_icp_output,
+                closest_curvature_plot_output,
+                closest_curvature_color_output,
+                closest_angle_plot_output,
+                closest_sample_id_output,
+                closest_template_synonymes,
+                current_index_state],
+        outputs=[
+            pinned_svg_output,
+            pinned_icp_output,
+            pinned_curvature_plot_output,
+            pinned_curvature_color_output,
+            pinned_angle_plot_output,
+            pinned_sample_id_output,
+            pinned_synonyme_output,
             pinned_index_display
-    ]
+        ]
     ).then(
         fn=update_analyze_button_color,
         inputs=analysis_button_inputs,
         outputs=[analyze_button]
-    ).then(
-        fn=update_closest_match_dropdown,
-        inputs=[closest_list_state, current_index_state],
-        outputs=[closest_match_dropdown],
     )
 
     # Dropdown change - loads from database and updates sliders

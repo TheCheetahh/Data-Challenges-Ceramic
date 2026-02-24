@@ -1,5 +1,8 @@
 from xml.etree import ElementTree as ET
 
+import math
+import re
+
 
 def format_svg_for_display(cleaned_svg):
     """
@@ -59,17 +62,49 @@ def remove_svg_fill(svg_string):
 
 
 def crop_svg_path(svg_string, crop_start, crop_end):
-    """
-    Crop an SVG path to keep only the segment between crop_start and crop_end.
+    """Crop an SVG polyline/polygon by keeping only the segment between crop_start and crop_end.
 
-    Args:
-        svg_string: Full SVG as string
-        crop_start: Start position as fraction (0.0-0.5)
-        crop_end: End position as fraction (0.51-1.0)
+    Zusätzliche Logik für kreisrunde/geschlossene Konturen:
+    - Anfang/Ende werden als *verbunden* behandelt (explizit geschlossen)
+    - der visuell *tiefste* Punkt wird als neuer Start/Endpunkt gesetzt
 
-    Returns:
-        Cropped SVG string
+    Hinweis: In SVG-Koordinaten wächst y nach unten. "Tiefster" Punkt => max(y).
     """
+
+    def _parse_points(points_str: str):
+        if not points_str:
+            return []
+        s = points_str.replace(',', ' ')
+        parts = [p for p in s.split() if p.strip()]
+        try:
+            nums = [float(p) for p in parts]
+        except ValueError:
+            nums = [float(x) for x in re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", s)]
+        if len(nums) % 2 != 0:
+            return []
+        return [(nums[i], nums[i + 1]) for i in range(0, len(nums), 2)]
+
+    def _fmt_points(points):
+        return ' '.join(f"{x:.6g} {y:.6g}" for x, y in points)
+
+    def _is_nearly_closed(points, *, close_ratio: float = 0.10, close_factor: float = 5.0):
+        if len(points) < 3:
+            return False
+        (x0, y0), (x1, y1) = points[0], points[-1]
+        end_dist = math.hypot(x1 - x0, y1 - y0)
+
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        diag = math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+        diag_thresh = close_ratio * diag if diag > 0 else 0.0
+
+        segs = [
+            math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1])
+            for i in range(len(points) - 1)
+        ]
+        avg_seg = (sum(segs) / len(segs)) if segs else 0.0
+        seg_thresh = close_factor * avg_seg if avg_seg > 0 else 0.0
+        return end_dist <= max(diag_thresh, seg_thresh)
 
     # Register namespace to avoid ns0: prefixes
     ET.register_namespace('', 'http://www.w3.org/2000/svg')
@@ -77,58 +112,70 @@ def crop_svg_path(svg_string, crop_start, crop_end):
     # Parse the SVG
     root = ET.fromstring(svg_string)
 
-    # Find the polyline element (or path if using path instead)
-    polyline = root.find('.//{http://www.w3.org/2000/svg}polyline')
+    # Find the element
+    poly = root.find('.//{http://www.w3.org/2000/svg}polyline')
+    if poly is None:
+        poly = root.find('.//polyline')
+    if poly is None:
+        poly = root.find('.//{http://www.w3.org/2000/svg}polygon')
+    if poly is None:
+        poly = root.find('.//polygon')
+    if poly is None:
+        return svg_string
 
-    if polyline is None:
-        # Try without namespace
-        polyline = root.find('.//polyline')
+    points = _parse_points(poly.get('points'))
+    if len(points) < 2:
+        return svg_string
 
-    if polyline is None:
-        # print("ERROR: No polyline found in SVG")
-        return svg_string  # Return original if no polyline found
+    # Decide if contour is "closed-like"
+    is_polygon = poly.tag.endswith('polygon')
+    fill = (poly.get('fill') or '').strip().lower()
+    closed_like = is_polygon or (fill not in ('', 'none')) or _is_nearly_closed(points)
 
-    # Get the points
-    points_str = polyline.get('points')
-    # print(f"Original points count: {len(points_str.split()) // 2}")
+    eps = 1e-9
+    if closed_like and len(points) >= 3:
+        # Unique vertices (drop explicit closing duplicate if present)
+        if math.hypot(points[-1][0] - points[0][0], points[-1][1] - points[0][1]) < eps:
+            unique = points[:-1]
+        else:
+            unique = points
 
-    # Parse points into list of (x, y) tuples
-    points = []
-    coords = points_str.strip().split()
-    for i in range(0, len(coords), 2):
-        if i + 1 < len(coords):
-            points.append((float(coords[i]), float(coords[i + 1])))
+        # Rebase seam to bottom-most point
+        idx = max(range(len(unique)), key=lambda i: unique[i][1])
+        unique = unique[idx:] + unique[:idx]
 
-    # Calculate indices from fractions (0.0-1.0 range)
-    total_points = len(points)
-    start_idx = int(total_points * crop_start)
-    end_idx = int(total_points * crop_end)
+        # Explicitly close the contour for stroke rendering
+        closed_points = unique + [unique[0]]
+        base_for_crop = unique
+    else:
+        closed_points = None
+        base_for_crop = points
 
-    """print(f"Total points: {total_points}")
-    print(f"Crop range: {crop_start} to {crop_end}")
-    print(f"Keeping points {start_idx} to {end_idx} ({end_idx - start_idx} points)")"""
-
-    # Ensure valid range
+    # Clamp and compute indices over the *unique* list
+    crop_start_f = float(crop_start)
+    crop_end_f = float(crop_end)
+    total_points = len(base_for_crop)
+    start_idx = int(total_points * crop_start_f)
+    end_idx = int(total_points * crop_end_f)
     start_idx = max(0, min(start_idx, total_points - 1))
     end_idx = max(start_idx + 1, min(end_idx, total_points))
 
-    # Crop the points - keep segment between start and end
-    cropped_points = points[start_idx:end_idx]
+    full_range = (crop_start_f <= 0.0) and (crop_end_f >= 1.0)
+    if closed_like and full_range and closed_points is not None:
+        cropped_points = closed_points
+    else:
+        cropped_points = base_for_crop[start_idx:end_idx]
 
     if not cropped_points:
-        print("ERROR: No points after cropping!")
         return svg_string
 
-    # Convert back to string format
-    cropped_points_str = ' '.join([f"{x} {y}" for x, y in cropped_points])
-
-    # Update the polyline with cropped points
-    polyline.set('points', cropped_points_str)
+    # Update points
+    poly.set('points', _fmt_points(cropped_points))
 
     # Remove fill and ensure stroke is visible
-    if 'fill' in polyline.attrib:
-        del polyline.attrib['fill']
-    polyline.set('fill', 'none')  # Explicitly set fill to none
+    if 'fill' in poly.attrib:
+        del poly.attrib['fill']
+    poly.set('fill', 'none')
 
     # Recalculate viewBox to fit cropped path
     xs = [p[0] for p in cropped_points]
@@ -136,24 +183,14 @@ def crop_svg_path(svg_string, crop_start, crop_end):
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
 
-    # Add some padding
     padding = 2
     min_x -= padding
     min_y -= padding
-    width = max_x - min_x + 2 * padding
-    height = max_y - min_y + 2 * padding
-
-    # print(f"New viewBox: {min_x} {min_y} {width} {height}")
+    width = (max_x - min_x) + 2 * padding
+    height = (max_y - min_y) + 2 * padding
 
     root.set('viewBox', f"{min_x} {min_y} {width} {height}")
     root.set('width', f"{width}mm")
     root.set('height', f"{height}mm")
 
-    # Convert back to string
-    cropped_svg = ET.tostring(root, encoding='unicode', method='xml')
-
-    """print("Cropped SVG:")
-    print(cropped_svg[:500])  # Print first 500 chars
-    print("...")"""
-
-    return cropped_svg
+    return ET.tostring(root, encoding='unicode', method='xml')
