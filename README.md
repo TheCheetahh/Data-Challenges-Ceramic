@@ -19,6 +19,10 @@ Add it to PATH
 
 Write in terminal: pip install -r requirements_pip.txt
 
+>Load all python package dependencies with conda from environment.yml
+
+Write in terminal: conda env create -f environment.yml
+
 ## How to launch:
 
 Start the program by running main.py and wait until it has booted up. 
