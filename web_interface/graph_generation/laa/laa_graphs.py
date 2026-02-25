@@ -1,8 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib
 
-from analysis.calculation.laa.laa_calcualtion import find_all_lip_index_by_angle
-from analysis.analyze_curvature import normalize_path
 matplotlib.use("Agg")
 from PIL import Image
 import io
