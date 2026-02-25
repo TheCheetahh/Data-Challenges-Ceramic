@@ -112,43 +112,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 status_output_text = gr.Textbox(label="Status", interactive=False, lines=8)
 
         with gr.Tab("Edit SVG Path"):
-            gr.Markdown("### Crop SVG Path")
-
-            crop_svg_dropdown = gr.Dropdown(
-                choices=[str(sid) for sid in db_handler.list_svg_ids()],
-                label="Select SVG to display",
-                interactive=True
-            )
-
-            crop_start = gr.Slider(
-                minimum=0.0,
-                maximum=0.5,
-                value=0.0,
-                step=0.01,
-                label="Crop start",
-                interactive=True
-            )
-
-            crop_end = gr.Slider(
-                minimum=0.51,
-                maximum=1.0,
-                value=1.0,
-                step=0.01,
-                label="Crop end",
-                interactive=True
-            )
-
-            seam_pos = gr.Slider(
-                minimum=0.0,
-                maximum=100.0,
-                value=50.0,
-                step=0.5,
-                label="Start/End Position (50 = lowest point)",
-                interactive=True
-            )
-
-            save_cropped_svg_button = gr.Button("Save cropped svg path")
-            save_status = gr.Textbox(label="Save Status", interactive=False)
 
             gr.Markdown("### Batch auto-crop saved SVGs")
 
@@ -200,6 +163,44 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 auto_crop_button = gr.Button("Auto-crop faulty SVGs")
 
             auto_crop_status = gr.Textbox(label="Auto-crop status", interactive=False, lines=8)
+
+            gr.Markdown("### Crop SVG Path")
+
+            crop_svg_dropdown = gr.Dropdown(
+                choices=[str(sid) for sid in db_handler.list_svg_ids()],
+                label="Select SVG to display",
+                interactive=True
+            )
+
+            crop_start = gr.Slider(
+                minimum=0.0,
+                maximum=0.5,
+                value=0.0,
+                step=0.01,
+                label="Crop start",
+                interactive=True
+            )
+
+            crop_end = gr.Slider(
+                minimum=0.51,
+                maximum=1.0,
+                value=1.0,
+                step=0.01,
+                label="Crop end",
+                interactive=True
+            )
+
+            seam_pos = gr.Slider(
+                minimum=0.0,
+                maximum=100.0,
+                value=50.0,
+                step=0.5,
+                label="Start/End Position (50 = lowest point)",
+                interactive=True
+            )
+
+            save_cropped_svg_button = gr.Button("Save cropped svg path")
+            save_status = gr.Textbox(label="Save Status", interactive=False)
 
             with gr.Row():
                 full_svg_display = gr.HTML(
