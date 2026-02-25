@@ -19,10 +19,10 @@ def save_direction_plot(sample_id, template_id, direction_deg, dir_aligned_crop,
 
     fig, ax = plt.subplots(figsize=(14, 5))
 
-    ax.plot(range(len(direction_deg)), direction_deg, color="red", linewidth=1.2, label=f"Sample ({sample_id})")
-    ax.plot(range(len(dir_aligned_crop)), dir_aligned_crop, color="blue", linewidth=1.2, label=f"Template ({template_id})")
+    ax.plot(range(len(direction_deg)), direction_deg, color="red", linewidth=2.2, label=f"Sample ({sample_id})")
+    ax.plot(range(len(dir_aligned_crop)), dir_aligned_crop, color="blue", linewidth=2.2, label=f"Template ({template_id})")
 
-    ax.axvline(x=best_shard_idx, color="green", linestyle="--", linewidth=1.0, alpha=0.7, label=f"Sample 0° point (idx {best_shard_idx})")
+    ax.axvline(x=best_shard_idx, color="black", linestyle="--", linewidth=2.0, alpha=0.7, label=f"Sample 0° point (idx {best_shard_idx})")
 
     ax.set_xlabel("Point index")
     ax.set_ylabel("Direction (degrees)")
