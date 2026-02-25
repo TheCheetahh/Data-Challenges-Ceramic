@@ -73,7 +73,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     # svg upload
                     with gr.Column():
                         with gr.Group():
-                            gr.Markdown("### SVG Uploads för sämples")
+                            gr.Markdown("### SVG Uploads for samples")
                             svg_input = gr.File(label="SVG-Dateien hochladen", file_types=[".svg"],
                                                 file_count="multiple", elem_id="svg_upload")
                             button_svg_upload = gr.Button("Upload .svg files")
@@ -81,14 +81,14 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     # csv upload
                     with gr.Column():
                         with gr.Group():
-                            gr.Markdown("### CSV Uploads för sämples")
+                            gr.Markdown("### CSV Upload")
                             csv_input = gr.File(label="CSV-Datei hochladen", file_types=[".csv"], elem_id="svg_upload")
                             csv_upload_button = gr.Button("Upload .csv file")
 
                     # svg upload for theory types
                     with gr.Group():
                         with gr.Column():
-                            gr.Markdown("### SVG Uploads för theörie tüps fröm le bööks")
+                            gr.Markdown("### SVG Uploads for theorie typs from le books")
                             theory_template_input = gr.File(label="SVG-Datei einer Theorie Vorlage hochladen",
                                                             file_types=[".svg"], file_count="multiple",
                                                             elem_id="svg_upload")
@@ -100,7 +100,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     with gr.Column():
                         with gr.Group():
                             # csv download
-                            gr.Markdown("### CSV Download för sämples täble")
+                            gr.Markdown("### CSV Download for samples table")
                             csv_download_button = gr.Button("Download Project CSV")
                             csv_file_output = gr.File(label="Download", visible=False)
 
