@@ -113,56 +113,6 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
         with gr.Tab("Edit SVG Path"):
 
-            gr.Markdown("### Batch auto-crop saved SVGs")
-
-            with gr.Row():
-                auto_crop_threshold = gr.Slider(
-                    minimum=0.0,
-                    maximum=100.0,
-                    value=90.0,
-                    step=0.5,
-                    label="Fault threshold (min start/end y%)",
-                    interactive=True,
-                )
-                auto_crop_overwrite = gr.Checkbox(
-                    label="Overwrite existing cropped_svg",
-                    value=False,
-                )
-                auto_crop_dry_run = gr.Checkbox(
-                    label="Dry run (no DB write)",
-                    value=True,
-                )
-
-            with gr.Row():
-                auto_crop_crop_start = gr.Slider(
-                    minimum=0.0,
-                    maximum=0.5,
-                    value=0.0,
-                    step=0.01,
-                    label="Batch crop start",
-                    interactive=True,
-                )
-                auto_crop_crop_end = gr.Slider(
-                    minimum=0.51,
-                    maximum=1.0,
-                    value=1.0,
-                    step=0.01,
-                    label="Batch crop end",
-                    interactive=True,
-                )
-
-            with gr.Row():
-                auto_crop_seam_pos = gr.Slider(
-                    minimum=0.0,
-                    maximum=100.0,
-                    value=50.0,
-                    step=0.5,
-                    label="Batch seam position",
-                    interactive=True,
-                )
-                auto_crop_button = gr.Button("Auto-crop faulty SVGs")
-
-            auto_crop_status = gr.Textbox(label="Auto-crop status", interactive=False, lines=8)
 
             gr.Markdown("### Crop SVG Path")
 
@@ -210,6 +160,58 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 cropped_svg_display = gr.HTML(
                     label="Cropped Path Preview"
                 )
+
+
+            gr.Markdown("### Batch auto-crop saved SVGs")
+
+            with gr.Row():
+                auto_crop_threshold = gr.Slider(
+                    minimum=0.0,
+                    maximum=100.0,
+                    value=75.0,
+                    step=0.5,
+                    label="Fault threshold (min start/end y%)",
+                    interactive=True,
+                )
+                auto_crop_overwrite = gr.Checkbox(
+                    label="Overwrite existing cropped_svg",
+                    value=False,
+                )
+                auto_crop_dry_run = gr.Checkbox(
+                    label="Dry run (no DB write)",
+                    value=True,
+                )
+
+            with gr.Row():
+                auto_crop_crop_start = gr.Slider(
+                    minimum=0.0,
+                    maximum=0.5,
+                    value=0.05,
+                    step=0.01,
+                    label="Batch crop start",
+                    interactive=True,
+                )
+                auto_crop_crop_end = gr.Slider(
+                    minimum=0.51,
+                    maximum=1.0,
+                    value=0.95,
+                    step=0.01,
+                    label="Batch crop end",
+                    interactive=True,
+                )
+
+            with gr.Row():
+                auto_crop_seam_pos = gr.Slider(
+                    minimum=0.0,
+                    maximum=100.0,
+                    value=50.0,
+                    step=0.5,
+                    label="Batch seam position",
+                    interactive=True,
+                )
+                auto_crop_button = gr.Button("Auto-crop faulty SVGs")
+
+            auto_crop_status = gr.Textbox(label="Auto-crop status", interactive=False, lines=8)
 
         # Tab for all analysis related tasks
         with gr.Tab("Analyse files"):
