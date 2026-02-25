@@ -13,6 +13,7 @@ from web_interface.button_calls.button_navigate_closest_sample import (
 from web_interface.button_calls.button_delete_rule import click_delete_rule
 from web_interface.button_calls.button_pin import click_pin_button
 from web_interface.button_calls.button_save_cropped_svg import click_save_cropped_svg
+from web_interface.button_calls.button_auto_crop_faulty_svgs import click_auto_crop_faulty_svgs
 from web_interface.button_calls.button_save_sample_type import click_save_sample_type
 from web_interface.button_calls.button_svg_upload import click_svg_upload
 from web_interface.button_calls.button_batch_analyze import click_batch_analyze
@@ -58,7 +59,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
 
     # Remember the last state
     last_analysis_state = gr.State(None)
-    
+
 
     with gr.Tabs():
         # Tab for all upload related things
@@ -111,6 +112,8 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                 status_output_text = gr.Textbox(label="Status", interactive=False, lines=8)
 
         with gr.Tab("Edit SVG Path"):
+
+
             gr.Markdown("### Crop SVG Path")
 
             crop_svg_dropdown = gr.Dropdown(
@@ -158,6 +161,58 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     label="Cropped Path Preview"
                 )
 
+
+            gr.Markdown("### Batch auto-crop saved SVGs")
+
+            with gr.Row():
+                auto_crop_threshold = gr.Slider(
+                    minimum=0.0,
+                    maximum=100.0,
+                    value=75.0,
+                    step=0.5,
+                    label="Fault threshold (min start/end y%)",
+                    interactive=True,
+                )
+                auto_crop_overwrite = gr.Checkbox(
+                    label="Overwrite existing cropped_svg",
+                    value=False,
+                )
+                auto_crop_dry_run = gr.Checkbox(
+                    label="Dry run (no DB write)",
+                    value=True,
+                )
+
+            with gr.Row():
+                auto_crop_crop_start = gr.Slider(
+                    minimum=0.0,
+                    maximum=0.5,
+                    value=0.05,
+                    step=0.01,
+                    label="Batch crop start",
+                    interactive=True,
+                )
+                auto_crop_crop_end = gr.Slider(
+                    minimum=0.51,
+                    maximum=1.0,
+                    value=0.95,
+                    step=0.01,
+                    label="Batch crop end",
+                    interactive=True,
+                )
+
+            with gr.Row():
+                auto_crop_seam_pos = gr.Slider(
+                    minimum=0.0,
+                    maximum=100.0,
+                    value=50.0,
+                    step=0.5,
+                    label="Batch seam position",
+                    interactive=True,
+                )
+                auto_crop_button = gr.Button("Auto-crop faulty SVGs")
+
+            auto_crop_status = gr.Textbox(label="Auto-crop status", interactive=False, lines=8)
+
         # Tab for all analysis related tasks
         with gr.Tab("Analyse files"):
             gr.Markdown("## 🌀 Sample Analysis")
@@ -168,7 +223,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     distance_type_dataset = gr.State("theory types")
                     """distance_type_dataset = gr.Dropdown(choices=["theory types"], value="theory types",
                                                         label="Distanzberechnung Datensatz")"""
-                    distance_value_dataset = gr.Dropdown(choices=["ICP", "lip_aligned_angle", "Orb", "DISK"],
+                    distance_value_dataset = gr.Dropdown(choices=["ICP", "lip_aligned_angle", "Keypoints"],
                                                          label="Calculation Algorithm")
                     distance_calculation = gr.Dropdown(choices=["Euclidean Distance", "Cosine Similarity",
                                                                 "Correlation Distance",
@@ -268,7 +323,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     )
 
                     pinned_icp_output = gr.Image(
-                        label="Overlap",
+                        label="ICP Overlap",
                         visible=False
                     )
                 with gr.Column(scale=1, min_width=400):
@@ -278,7 +333,7 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
                     )
 
                     closest_icp_output = gr.Image(
-                        label="Overlap", interactive=False,
+                        label="ICP Overlap", interactive=False,
                         visible=True
                     )
 
@@ -619,6 +674,19 @@ with gr.Blocks(title="Ceramics Analysis", css=css) as demo:
         fn=click_save_cropped_svg,
         inputs=[crop_svg_dropdown, crop_start, crop_end, seam_pos],
         outputs=[save_status]
+    )
+
+    auto_crop_button.click(
+        fn=click_auto_crop_faulty_svgs,
+        inputs=[
+            auto_crop_threshold,
+            auto_crop_overwrite,
+            auto_crop_seam_pos,
+            auto_crop_crop_start,
+            auto_crop_crop_end,
+            auto_crop_dry_run,
+        ],
+        outputs=[auto_crop_status],
     )
 
     add_button.click(
