@@ -109,6 +109,7 @@ def extract_features(img, max_kp=800):
 
 # -------------------------
 # Draw keypoints
+# A debugging tool for visualisation
 # -------------------------
 def draw_keypoints(img, kp):
     vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
@@ -180,6 +181,7 @@ def ransac_filter(kp_q, kp_t, matches, thresh=3.0):
 
 # -------------------------
 # Draw match lines
+# A debugging tool for visualisation
 # -------------------------
 def draw_matches(img1, kp1, img2, kp2, matches):
 
