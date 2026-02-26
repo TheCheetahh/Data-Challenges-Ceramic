@@ -12,6 +12,8 @@ import kornia.feature as KF
 import cairosvg
 import matplotlib.pyplot as plt
 
+from analysis.calculation.keypoint.convert_svg_to_opencv import load_svg
+
 # -------------------------
 # Device
 # -------------------------
@@ -204,6 +206,11 @@ def draw_matches(img1, kp1, img2, kp2, matches):
 
     return canvas
 
+# -------------------------
+# Calculate matching score for the Sample and one given Template SVG
+# Should safe DISK keypoints, descriptors and List of closes matches in MongoDB for huge speedup
+# and graph generation
+# -------------------------
 
 def disk_distance(analysis_config, template_doc, template_id):
     

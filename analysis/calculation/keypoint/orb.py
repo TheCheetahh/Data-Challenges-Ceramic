@@ -6,53 +6,7 @@ import cairosvg
 from svgpathtools import svg2paths
 import xml.etree.ElementTree as ET
 
-
-
-
-
-# -------------------------
-# Load SVG → OpenCV image (no preprocessing)
-# Given that Orb does not work directly on the SVG vector representation it needs to be converted
-# -------------------------
-def load_svg(svg_input, size=(256, 256)):
-    """
-    Load SVG from:
-        - ET.Element
-        - ET.ElementTree
-        - SVG string
-    and convert to OpenCV image (Grayscale).
-    """
-
-    # Convert input to SVG string
-    if isinstance(svg_input, ET.Element):
-        svg_string = ET.tostring(svg_input, encoding="unicode")
-
-    elif isinstance(svg_input, ET.ElementTree):
-        svg_string = ET.tostring(svg_input.getroot(), encoding="unicode")
-
-    elif isinstance(svg_input, str):
-        svg_string = svg_input
-
-    else:
-        raise TypeError("svg_input must be Element, ElementTree, or SVG string")
-
-    # Render SVG → PNG bytes (in memory)
-    png_bytes = cairosvg.svg2png(
-        bytestring=svg_string.encode("utf-8"),
-        output_width=size[0],
-        output_height=size[1],
-        background_color="white"
-    )
-
-    # Convert PNG bytes → OpenCV image
-    png_data = np.frombuffer(png_bytes, np.uint8)
-    img = cv2.imdecode(png_data, cv2.IMREAD_GRAYSCALE)
-
-    if img is None:
-        raise ValueError("Could not render SVG.")
-
-    return img
-
+from analysis.calculation.keypoint.convert_svg_to_opencv import load_svg
 
 # -------------------------
 # Show image
@@ -113,22 +67,50 @@ def match_features(des_sample, des_template, distance_threshold=50):
     # Keeping only matches closer than the threshold (might need some finetuning still)
     good = [m for m in matches if m.distance < distance_threshold]
 
-    # Normalize 
-    normalization_factor = min(len(des_sample), len(des_template))
 
-    if normalization_factor == 0:
-        print("normalization_factor")
-        return 1.0
+    # Return list of close matches
+    return good
 
-    # (1.0 = perfect match, 0.0 = no match at all) gets switched at return
-    normalized_score = len(good) / normalization_factor
 
-    # Return 1 - normalized score because it is sorted by lowest distance.
-    return float(1 - normalized_score)
+# -------------------------
+# RANSAC verification
+# -------------------------
+def ransac_filter(kp_q, kp_t, matches, thresh=3.0):
+
+    if len(matches) < 4:
+        return []
+
+    src = []
+    dst = []
+
+    for m in matches:
+        i = m.queryIdx
+        j = m.trainIdx
+
+        src.append(kp_q[i].pt)
+        dst.append(kp_t[j].pt)
+
+    src = np.float32(src)
+    dst = np.float32(dst)
+
+    H, mask = cv2.findHomography(src, dst, cv2.RANSAC, thresh)
+
+    if mask is None:
+        return []
+
+    inliers = []
+
+    for i, m in enumerate(mask.ravel()):
+        if m:
+            inliers.append(matches[i])
+
+    return inliers
 
 
 # -------------------------
 # Calculate matching score for the Sample and one given Template SVG
+# Should safe Orb keypoints, descriptors and List of closes matches in MongoDB for huge speedup
+# and graph generation
 # -------------------------
 def orb_distance(analysis_config, template_doc, template_id):
 
@@ -151,8 +133,13 @@ def orb_distance(analysis_config, template_doc, template_id):
     kp_s, des_s = extract_features(sample)
     kp_t, des_t = extract_features(template)
 
-    # Get score
-    score = match_features(des_s, des_t, distance_threshold=50)
+    # Get matches and check for geometric consistancy using RANSAC
+    matches = match_features(des_s, des_t, distance_threshold=50) 
+    inliers = ransac_filter(kp_s, kp_t, matches)
 
-    return score
+    # Normalization (important)
+    normalized_score = len(inliers) / max(1, len(matches))
+    distance = 1.0 - normalized_score
+
+    return float(distance)
 
