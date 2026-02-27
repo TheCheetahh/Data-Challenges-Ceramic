@@ -40,7 +40,9 @@ Any and all data about samples and types that cannot be viewed in the user inter
 
 > sample .SVG uploads
 
-Upload multiple svgs of your shard samples at once. Press the Upload Button to confirm the download. 
+Upload multiple svgs of your shard samples at once. Press the Upload Button to confirm the download.
+
+For the templates you can upload the ones you find in this project. They were cleaned of their licenced elements (they used to have a screenshot of their source attached, which disallowed us from sharing them previously).
 
 Upload the svg with their full names as they are, the program reads the sample_id from the file name.
 Currently, the correct naming scheme is: recons_#####.svg (with ##### being a number of any length). The program was created assuming this is the name of the sample files, although other names could possibly work too without throwing an error. The _ and everything before it will be deleted from the file name to create the sample id.
